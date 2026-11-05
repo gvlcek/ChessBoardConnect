@@ -4,3 +4,6 @@
 DerivedData/
 xcuserdata/
 *.xcuserstate
+
+# Personal signing overrides for the example app
+/Examples/ConnectTestApp/Config/Signing.local.xcconfig

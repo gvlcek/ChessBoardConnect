@@ -1,0 +1,3 @@
+// Shared defaults for the example app. Personal signing belongs in the optional local file.
+PRODUCT_BUNDLE_IDENTIFIER = com.example.ChessBoardConnect.TestApp
+#include? "Signing.local.xcconfig"

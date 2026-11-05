@@ -7,11 +7,19 @@ All app text, diagnostic report labels, and documentation are written in English
 ## Run
 
 1. Open `ConnectTestApp.xcodeproj` in this folder.
-2. Select the **ConnectTestApp** target → Signing & Capabilities → choose your development team. No team is configured in the project; change the Bundle Identifier to one available in your account if needed.
+2. Copy `Config/Signing.local.xcconfig.example` to `Config/Signing.local.xcconfig`. Enter your Apple development team ID and a bundle identifier available in your account. The local file is ignored by Git; keep these overrides out of the Xcode Build Settings editor to avoid modifying the shared project.
 3. Select a physical iPhone running iOS 17+ and run the **ConnectTestApp** scheme.
 4. Turn on the Go and disconnect other apps. Tap **Scan**, allow Bluetooth access, and select the board from the list.
 
 The project references the package at `../..`, so it works both from an independent ChessBoardConnect clone and from the local copy inside Chess Dex. It does not depend on ChessDex.xcodeproj. Simulator execution is not evidence of hardware connectivity.
+
+## Local signing
+
+`Config/Signing.xcconfig` is the shared base configuration for Debug and Release. It uses a generic bundle identifier and optionally includes `Signing.local.xcconfig`. A fresh clone can build for Simulator or with signing disabled without creating the local file. Installing on an iPhone requires your own team and bundle identifier in that local file.
+
+Only the shared configuration, template, and Xcode project are committed. The personal local file is ignored. Do not ignore `project.pbxproj`: source references, package dependencies, and other shared project settings must remain versioned. `skip-worktree` and `assume-unchanged` are not needed.
+
+See [Apple's build configuration file documentation](https://developer.apple.com/documentation/xcode/adding-a-build-configuration-file-to-your-project).
 
 ## Screens and controls
 
