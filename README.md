@@ -96,6 +96,18 @@ The package is independent of any consuming app. Add it using Swift Package Mana
 
 Open `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, create the ignored local signing configuration described in the example guide, and run on a physical iPhone. The example's guide includes a hardware checklist. Recommended workflow: package tests → test app with a physical board → integration in your own app.
 
+## What consuming apps include
+
+The only public Swift Package Manager product is the `ChessBoardConnect` library. Its production target contains the files under `Sources/ChessBoardConnect` and has no dependency on the example app or its support code.
+
+| Usage | Included in the build |
+| --- | --- |
+| Add the library to your app | `ChessBoardConnect` and its Apple framework dependencies |
+| Clone this repository and open the example Xcode project | The separate iPhone test app, which consumes the library |
+| Run `swift test` in this repository | The library tests and the example report-export support tests |
+
+Swift Package Manager may fetch the entire source repository, including `Examples/`. Those files being present in a checkout does not make the example an installed app, an exported product, or part of a consuming app's binary. Dependency test targets are not part of the library product either. To run the test app, explicitly open its Xcode project from a clone of this repository.
+
 ## Driver-independent BLE diagnostics
 
 `BoardDiagnostics` provides an optional metadata-only inspection API. It can inspect a selected device's GATT services and characteristic properties before a game driver exists. By default it includes all candidates, including unnamed devices; `BoardDiagnostics(namePrefix: "ChessUp")` limits results from both discovery paths to a case-insensitive peripheral/local name prefix. The filter uses current discovery identifiers rather than pinning a particular board UUID.

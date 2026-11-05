@@ -4,6 +4,8 @@ An independent iPhone diagnostic app for testing **ChessBoardConnect**. It uses 
 
 All app text, diagnostic report labels, and documentation are written in English.
 
+This example is development tooling kept in the same repository as the library. It is not a Swift Package Manager product and is not compiled or installed when another app adds the `ChessBoardConnect` library. Its Xcode project is committed so maintainers can open it directly; no project generator is required.
+
 ## Run
 
 1. Open `ConnectTestApp.xcodeproj` in this folder.
