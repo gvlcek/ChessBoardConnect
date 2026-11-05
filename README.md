@@ -77,6 +77,12 @@ Public square indices run from a8=0 to h8=7, then down to a1=56 through h1=63. U
 
 The classic registry recognizes Chessnut names and explicitly excludes Move and Evo, which must not receive this protocol based only on the brand name. Go is the target for physical testing; compatibility with every classic firmware version is not guaranteed.
 
+## Future board support
+
+I'd love to support more electronic chessboards in the future. I currently own a **Chessnut Go** and a **ChessUp 2**, so these are the two boards I can test with directly.
+
+If you own another board, have protocol documentation, or would like to help add or test support for a new model, I'd be happy to hear from you. You can reach me at [gvlcek@icloud.com](mailto:gvlcek@icloud.com).
+
 ## Add another board
 
 All changes belong inside this package:
