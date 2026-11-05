@@ -1,0 +1,21 @@
+name: Swift checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Package and example support tests
+        run: swift test --parallel
+      - name: Compile iPhone example without personal signing
+        run: >-
+          xcodebuild -project Examples/ConnectTestApp/ConnectTestApp.xcodeproj
+          -scheme ConnectTestApp -configuration Debug -sdk iphoneos
+          -destination 'generic/platform=iOS'
+          CODE_SIGNING_ALLOWED=NO build

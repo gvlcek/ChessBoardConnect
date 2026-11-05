@@ -13,8 +13,11 @@ public struct BoardPosition: Equatable, Sendable {
         for rank in ranks {
             var row: [Character] = []
             for c in rank {
-                if let n = c.wholeNumberValue, (1...8).contains(n) { row += Array(repeating: ".", count: n) }
-                else if "prnbqkPRNBQK".contains(c) { row.append(c) }
+                if let n = c.wholeNumberValue, c.isASCII, (1...8).contains(n) {
+                    guard row.count + n <= 8 else { throw BoardError.invalidPosition }
+                    row += Array(repeating: ".", count: n)
+                }
+                else if "prnbqkPRNBQK".contains(c), row.count < 8 { row.append(c) }
                 else { throw BoardError.invalidPosition }
             }
             guard row.count == 8 else { throw BoardError.invalidPosition }
@@ -28,7 +31,7 @@ public struct BoardPosition: Equatable, Sendable {
     }
     public static func index(_ name: String) -> Int? {
         let chars = Array(name)
-        guard chars.count == 2, let file = "abcdefgh".firstIndex(of: chars[0]), let rank = chars[1].wholeNumberValue, (1...8).contains(rank) else { return nil }
+        guard chars.count == 2, chars[1].isASCII, let file = "abcdefgh".firstIndex(of: chars[0]), let rank = chars[1].wholeNumberValue, (1...8).contains(rank) else { return nil }
         return (8 - rank) * 8 + "abcdefgh".distance(from: "abcdefgh".startIndex, to: file)
     }
     public static func name(_ index: Int) -> String { "\(Array("abcdefgh")[index % 8])\(8 - index / 8)" }

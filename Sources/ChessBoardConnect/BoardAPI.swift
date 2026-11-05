@@ -28,7 +28,7 @@ public enum ConnectionState: Equatable, Sendable {
 
 public enum ConnectError: Error, Equatable, Sendable {
     case notConnected, deviceNotFound, busy, unsupportedCapability, invalidSquare
-    case sessionNotInitialized, invalidFEN
+    case sessionNotInitialized, invalidFEN, commandTooLarge
 }
 
 /// Main-actor API: all discovery, transport and manufacturer details stay inside Connect.
@@ -81,6 +81,7 @@ extension ConnectError: LocalizedError {
         case .unsupportedCapability: "This operation is not supported by the connected driver."
         case .invalidSquare: "Enter valid, distinct squares and a valid promotion piece."
         case .sessionNotInitialized: "Load a full FEN and wait for the study session confirmation first."
+        case .commandTooLarge: "The command exceeds the connection write limit; no session commands were sent."
         case .invalidFEN: "Enter a full FEN with valid placement, turn, castling, en passant, and counters (halfmove 0–255, fullmove 1–65535)."
         }
     }

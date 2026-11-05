@@ -13,7 +13,7 @@ public final class BoardConnect: BoardConnecting {
     @Published public private(set) var ready = false
     @Published public private(set) var scanning = false
     @Published public private(set) var logs: [String] = []
-    public var canReconnect: Bool { session.canReconnect }
+    @Published public private(set) var canReconnect = false
     public var connectedOrConnecting: Bool { session.connectedOrConnecting }
     private let session: BluetoothSession
     private var subscriptions = Set<AnyCancellable>()
@@ -27,6 +27,7 @@ public final class BoardConnect: BoardConnecting {
         session.$position.sink { [weak self] in self?.position = $0 }.store(in: &subscriptions)
         session.$capabilities.sink { [weak self] in self?.capabilities = $0 }.store(in: &subscriptions)
         session.$ready.sink { [weak self] in self?.ready = $0 }.store(in: &subscriptions)
+        session.$canReconnect.sink { [weak self] in self?.canReconnect = $0 }.store(in: &subscriptions)
         session.$scanning.sink { [weak self] in self?.scanning = $0 }.store(in: &subscriptions)
         session.$logs.sink { [weak self] in self?.logs = $0 }.store(in: &subscriptions)
     }

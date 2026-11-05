@@ -1,6 +1,6 @@
 # ConnectTestApp
 
-An iPhone diagnostic app for testing **ChessBoardConnect without Chess Dex**. It uses only `import ChessBoardConnect` and the public API. It does not include its own drivers, UUIDs, or manufacturer commands.
+An independent iPhone diagnostic app for testing **ChessBoardConnect**. It uses only `import ChessBoardConnect` and the public API. It does not include its own drivers, UUIDs, or manufacturer commands.
 
 All app text, diagnostic report labels, and documentation are written in English.
 
@@ -11,7 +11,7 @@ All app text, diagnostic report labels, and documentation are written in English
 3. Select a physical iPhone running iOS 17+ and run the **ConnectTestApp** scheme.
 4. Turn on the Go and disconnect other apps. Tap **Scan**, allow Bluetooth access, and select the board from the list.
 
-The project references the package at `../..`, so it works both from an independent ChessBoardConnect clone and from the local copy inside Chess Dex. It does not depend on ChessDex.xcodeproj. Simulator execution is not evidence of hardware connectivity.
+The project references the package at `../..` within this repository. It does not depend on another application project. Simulator execution is not evidence of hardware connectivity.
 
 ## Local signing
 
@@ -31,6 +31,8 @@ See [Apple's build configuration file documentation](https://developer.apple.com
 - **Diagnostics:** recent events, an optional firmware field, and log export (up to the module's last 200 events). The report includes the date, test app version, device type and iOS version, board name, capabilities, position, and TX/RX bytes.
 
 An accepted command is **queued**. The app's confirmation does not prove that the firmware executed it or that the pieces were moved. Check the board and its readings.
+
+**Export log** captures the board state once, prepares a text file off MainActor, and opens the system share sheet with that fixed file. Incoming events do not change the report while sharing. The temporary report is removed when the sheet is dismissed. Export failures appear as alerts; leaving the view cancels presentation and cleans up a pending export.
 
 Both modes provide a **Clear logs** button beside the export controls. It clears the recorded events without disconnecting, resetting reading counters, or removing position/GATT snapshots. New events continue to appear while a session is active; exported reports still include their current summary and snapshot.
 
@@ -55,7 +57,7 @@ Promotion handling sends the piece choice after the move acknowledgment and wait
 
 **Export log** includes current status, last reported move, and up to 200 TX/RX/events. **Clear logs** keeps the connection. Switching tabs disconnects the previous session. The system-connected lookup remains distinct from advertisement scanning; unavailable RSSI is labeled accordingly.
 
-Previously verified on hardware: system-connected lookup, local connection, and UART/GATT service discovery. New driver notification subscriptions, handshake, command acknowledgments, move coordinates, and promotion behavior still require this physical test. Packet tests and successful compilation do not establish firmware compatibility.
+Verified on one ChessUp 2: system lookup, local connection, FEN study initialization, receive e2e4, send e7e5 with the corresponding board lights, and receive e7e5 after physically moving the piece. Castling, captures, promotion, both-color replay, and recovery still require physical validation. Packet tests and successful compilation do not establish compatibility with all firmware.
 
 ## Hardware checklist
 
@@ -84,7 +86,7 @@ If the Go reports only when pieces move, move and return a piece after requestin
 1. Modify Connect.
 2. Run `swift test` from the package root.
 3. Run this app on an iPhone and validate the change with hardware.
-4. Update the dependency in Chess Dex and verify its integration.
+4. Update the dependency in your consuming app and verify its integration.
 
 To check compilation only, run from the ChessBoardConnect repository root:
 
@@ -95,4 +97,8 @@ xcodebuild -project Examples/ConnectTestApp/ConnectTestApp.xcodeproj \
   -derivedDataPath /tmp/connect-testapp-build CODE_SIGNING_ALLOWED=NO build
 ```
 
-**Hardware status:** Go connection and incoming position frames observed. ChessUp 2 system lookup, local connection, and GATT inspection observed. Full Go square/light checks and ChessUp game-protocol communication remain to be validated.
+**Hardware status:** Go e2e4 position decoding and e2/e4 lights on/off verified. ChessUp 2 basic FEN/send/receive study flow verified. Full edge-case and firmware coverage remains pending.
+
+## Responsiveness regression check
+
+On an iPhone with a board streaming positions, scroll the form, tap Export log, dismiss the share sheet, and repeat while moving pieces. Confirm the UI remains responsive, every shared file keeps the state captured at its own export tap, clear logs still works, and dismissing the sheet leaves the connection active. If a hang persists, record the board/firmware, iOS version, destination activity, and an Instruments Hangs/Time Profiler trace. The exporter tests verify file contents, event limits, snapshot stability, unique paths, errors, and cleanup; they do not replace device profiling or tests of third-party share extensions.

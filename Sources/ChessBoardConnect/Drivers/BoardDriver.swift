@@ -57,3 +57,13 @@ extension BoardDriver {
     func moveCommand(_ move: BoardMove) throws -> Data { throw ConnectError.unsupportedCapability }
     func positionCommand(_ fen: String) throws -> Data { throw ConnectError.unsupportedCapability }
 }
+
+/// Stage a value-type driver's entire command batch before transport sends any packet.
+enum DriverCommands {
+    static func prepare(_ command: BoardCommand, driver: any BoardDriver, maximumLength: Int) throws -> (driver: any BoardDriver, packets: [Data]) {
+        var staged = driver
+        let packets = try staged.prepare(command)
+        guard packets.allSatisfy({ $0.count <= maximumLength }) else { throw ConnectError.commandTooLarge }
+        return (staged, packets)
+    }
+}

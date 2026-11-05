@@ -30,4 +30,21 @@ final class CoreChecks: XCTestCase {
         do { _ = try BoardPosition(fen: "9/8/8/8/8/8/8/8"); fatalError("Invalid FEN accepted") } catch BoardError.invalidPosition {}
 
     }
+    func testMalformedPlacementIsRejectedWithoutExpandingPastEightSquares() throws {
+        for fen in ["88/8/8/8/8/8/8/8", "９/8/8/8/8/8/8/8", "PPPPPPPPP/8/8/8/8/8/8/8", String(repeating: "8", count: 100_000) + "/8/8/8/8/8/8/8"] {
+            XCTAssertThrowsError(try BoardPosition(fen: fen))
+        }
+        XCTAssertNil(BoardPosition.index("e٤"))
+        XCTAssertNil(BoardPosition.index("a9"))
+    }
+    func testNoiseAndFragmentedExtendedReportsResynchronize() throws {
+        let payload: [UInt8] = [0x58,0x23,0x31,0x85] + Array(repeating: 0x44, count: 4) + Array(repeating: 0, count: 16) + Array(repeating: 0x77, count: 4) + [0xA6,0xC9,0x9B,0x6A]
+        let packet = Data([1,36] + payload + [0,0,0,0])
+        var decoder = ChessnutFrames()
+        XCTAssertTrue(decoder.append(Data([255,0,1,0]) + packet.prefix(5)).isEmpty)
+        let frames = decoder.append(packet.dropFirst(5) + packet)
+        XCTAssertEqual(frames, [packet,packet])
+        XCTAssertEqual(try ChessnutCodec.decode(frames[0]), .initial)
+    }
+
 }

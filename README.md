@@ -10,16 +10,18 @@ All project documentation, app text, diagnostic messages, and examples are writt
 
 ## Use in another app
 
-In Xcode, choose Add Package Dependencies → Add Local, select this folder, and link the `ChessBoardConnect` product to your target. In a consuming Swift package:
+In Xcode, choose **Add Package Dependencies**, enter `https://github.com/gvlcek/ChessBoardConnect`, and select the `main` branch. Link the `ChessBoardConnect` library product to your target. In a consuming Swift package:
 
 ```swift
-// Package.swift: paths are relative to the consuming package.
-.package(path: "../ChessBoardConnect")
+// Package.swift
+.package(url: "https://github.com/gvlcek/ChessBoardConnect.git", branch: "main")
 // In the target's dependencies:
 .product(name: "ChessBoardConnect", package: "ChessBoardConnect")
 ```
 
-The host app must declare `NSBluetoothAlwaysUsageDescription` in its Info.plist. A sandboxed macOS app must also enable the Bluetooth entitlement. The package includes no UI and does not request permission until a scan starts.
+You can also use a local checkout with `.package(path: "../ChessBoardConnect")`. This is an early project; APIs may change before 1.0. Keep the resolved dependency revision under version control.
+
+The host app must declare `NSBluetoothAlwaysUsageDescription` in its Info.plist. A sandboxed macOS app must also enable the Bluetooth entitlement. The package includes no UI and requests Bluetooth permission only when discovery is started.
 
 ```swift
 import ChessBoardConnect
@@ -70,8 +72,8 @@ Public square indices run from a8=0 to h8=7, then down to a1=56 through h1=63. U
 
 | Driver | Status | Current capabilities |
 | --- | --- | --- |
-| Classic Chessnut | Connection and incoming frames observed on Go; full hardware checklist pending | Read positions, control lights |
-| ChessUp / ChessUp 2 | Experimental UART driver; protocol hardware validation pending | Receive moves, send moves, load full FEN |
+| Classic Chessnut | Go basic hardware flow verified: position after e2e4 and e2/e4 lights on/off | Read positions, control lights |
+| ChessUp / ChessUp 2 | ChessUp 2 basic study flow verified: FEN, receive e2e4, send e7e5 with board lights, receive physical e7e5 | Receive moves, send moves, load full FEN |
 
 The classic registry recognizes Chessnut names and explicitly excludes Move and Evo, which must not receive this protocol based only on the brand name. Go is the target for physical testing; compatibility with every classic firmware version is not guaranteed.
 
@@ -86,13 +88,13 @@ All changes belong inside this package:
 
 `BoardConnect` is the public facade, `BluetoothSession` handles transport, and drivers understand manufacturer messages. UUIDs, characteristics, and Bluetooth packets do not appear in the public interface. PGN import, game catalogs, study debounce, and target-position confirmation belong to the consuming app.
 
-The package can be moved to an independent repository while keeping its `Package.swift`. Chess Dex uses a local dependency so development and testing do not require publishing a release.
+The package is independent of any consuming app. Add it using Swift Package Manager or a local checkout.
 
 ## Independent test app
 
-[`Examples/ConnectTestApp`](Examples/ConnectTestApp/README.md) contains an iPhone Xcode project that consumes the local package. It can scan for and connect to boards, inspect positions and capabilities, light up squares, reconnect, and export logs. It has no dependency on Chess Dex or game-study logic.
+[`Examples/ConnectTestApp`](Examples/ConnectTestApp/README.md) contains an iPhone Xcode project that consumes the local package. It can scan for and connect to boards, inspect positions and capabilities, light up squares, reconnect, and export logs. It has no dependency on a host app or game-study logic.
 
-Open `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, select your signing team, and run on a physical iPhone. The example's guide includes a hardware checklist. Recommended workflow: package tests → test app with a physical board → Chess Dex integration.
+Open `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, create the ignored local signing configuration described in the example guide, and run on a physical iPhone. The example's guide includes a hardware checklist. Recommended workflow: package tests → test app with a physical board → integration in your own app.
 
 ## Driver-independent BLE diagnostics
 
@@ -117,4 +119,12 @@ Classic protocol sources:
 - [Manufacturer documentation](https://github.com/chessnutech/Chessnut_eBoards)
 - [Official SDK implementation](https://github.com/chessnutech/EasyLinkSDK/blob/main/sdk/EasyLink.cpp)
 
-The lights command uses 10 bytes, matching the manufacturer's SDK code. Its README is ambiguous: it mentions 34 bytes while showing a 10-byte command. Confirm behavior on the Go before claiming validated compatibility.
+The lights command uses 10 bytes, matching the manufacturer's SDK code. Its README is ambiguous: it mentions 34 bytes while showing a 10-byte command. Basic e2/e4 light control has been verified on one Go. Other firmware versions and the complete hardware checklist remain unverified.
+
+## Contributing and review
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and hardware reports, and [the review notes](docs/REVIEW.md) for fixes, evidence, and remaining validation work. CI runs package tests (including the example report exporter) and an unsigned iPhone example build on macOS.
+
+## License
+
+[MIT](LICENSE) · Copyright 2026 Guadalupe Vlcek.

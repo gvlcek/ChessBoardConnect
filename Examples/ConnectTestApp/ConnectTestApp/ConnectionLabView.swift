@@ -16,6 +16,10 @@ struct ConnectionLabView: View {
     @State private var lastReading: Date?
     @State private var readingCount = 0
     @State private var firmware = ""
+    @State private var exporting = false
+    @State private var exportTask: Task<Void, Never>?
+    @State private var exportedReport: PreparedReport?
+    @State private var exportToRemove: URL?
     let chessUpOnly: Bool
     init(chessUpOnly: Bool = false) { self.chessUpOnly = chessUpOnly }
     private let glyphs: [Character: String] = ["K":"♔", "Q":"♕", "R":"♖", "B":"♗", "N":"♘", "P":"♙", "k":"♚", "q":"♛", "r":"♜", "b":"♝", "n":"♞", "p":"♟"]
@@ -24,7 +28,7 @@ struct ConnectionLabView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("Test board connectivity and data without opening Chess Dex.")
+                    Text("Test board connectivity, positions, moves, and lights.")
                         .font(.callout).foregroundStyle(.secondary)
                     Label(connect.status, systemImage: connect.ready ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right")
                     LabeledContent("Status", value: stateName)
@@ -151,9 +155,12 @@ struct ConnectionLabView: View {
                 }
                 Section("Diagnostics") {
                     TextField("Board firmware (optional)", text: $firmware)
-                    ShareLink(item: diagnosticReport) {
-                        Label("Export log", systemImage: "square.and.arrow.up")
+                    Button {
+                        exportReport()
+                    } label: {
+                        Label(exporting ? "Preparing report…" : "Export log", systemImage: "square.and.arrow.up")
                     }
+                    .disabled(exporting)
                     Button("Clear logs", systemImage: "trash") { connect.clearLogs() }
                         .disabled(connect.logs.isEmpty)
                     Text("Exports the last 200 events, including TX/RX messages, and the device information shown in the report.")
@@ -166,7 +173,13 @@ struct ConnectionLabView: View {
                 }
             }
             .navigationTitle(chessUpOnly ? "ChessUp Test" : "Connect Test")
-            .onDisappear { connect.disconnect() }
+            .onDisappear { exportTask?.cancel(); connect.disconnect() }
+            .sheet(item: $exportedReport, onDismiss: {
+                if let file = exportToRemove { Task { await ReportExport.remove(file) } }
+                exportToRemove = nil
+            }) { report in
+                ReportShareSheet(url: report.url)
+            }
             .alert("Action failed", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button("Close", role: .cancel) { errorMessage = nil }
             } message: { Text(errorMessage ?? "") }
@@ -212,23 +225,35 @@ struct ConnectionLabView: View {
         case .failed(let message): "Error: \(message)"
         }
     }
-    private var diagnosticReport: String {
+    private func exportReport() {
+        guard !exporting else { return }
+        // Capture Apple/UI objects on MainActor once. Formatting and disk I/O run off it.
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        return """
-        ChessBoardConnect · ConnectTestApp \(version) (\(build))
-        Date: \(Date().formatted(.iso8601))
-        Device: \(UIDevice.current.model), \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)
-        Selected board: \(selectedName)
-        Firmware (entered manually): \(firmware.isEmpty ? "Not provided" : firmware)
-        Status: \(stateName)
-        Capabilities: \(connect.capabilities.rawValue)
-        Last reported move: \(connect.lastMove.map { BoardPosition.name($0.from) + BoardPosition.name($0.to) + ($0.promotion.map(String.init) ?? "") } ?? "None")
-        Current position: \(connect.position?.fen ?? "No reading")
-        Readings: \(readingCount)
+        let move = connect.lastMove.map { BoardPosition.name($0.from) + BoardPosition.name($0.to) + ($0.promotion.map(String.init) ?? "") } ?? "None"
+        let snapshot = ReportSnapshot(fields: [
+            "ChessBoardConnect · ConnectTestApp \(version) (\(build))",
+            "Date: \(Date().formatted(.iso8601))",
+            "Device: \(UIDevice.current.model), \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)",
+            "Selected board: \(selectedName)",
+            "Firmware: \(firmware.isEmpty ? "Not provided" : firmware)",
+            "Status: \(connect.status)",
+            "Capabilities: \(connect.capabilities.rawValue)",
+            "Last reported move: \(move)",
+            "Current position: \(connect.position?.fen ?? "No reading")",
+            "Readings: \(readingCount)"
+        ], logs: connect.logs)
+        exporting = true
+        exportTask = Task {
+            defer { exporting = false }
 
-        \(connect.logs.joined(separator: "\n"))
-        """
+            do {
+                let url = try await ReportExport.prepare(snapshot)
+                guard !Task.isCancelled else { await ReportExport.remove(url); return }
+                exportToRemove = url
+                exportedReport = PreparedReport(url: url)
+            } catch { errorMessage = error.localizedDescription }
+        }
     }
     private func boardGrid(_ position: BoardPosition) -> some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 8), spacing: 0) {
@@ -247,4 +272,17 @@ struct ConnectionLabView: View {
 private enum LabError: LocalizedError {
     case invalidSquares
     var errorDescription: String? { "Enter squares from a1 to h8, separated by spaces or commas. For example: e2 e4." }
+}
+
+private struct PreparedReport: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct ReportShareSheet: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

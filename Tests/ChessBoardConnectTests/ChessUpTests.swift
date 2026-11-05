@@ -85,4 +85,19 @@ final class ChessUpTests: XCTestCase {
         _ = try receive([0x26, 0x99, 0, 1, 0, 12, 28], driver: &driver)
         XCTAssertFalse(driver.commandPending)
     }
+    func testBatchPreflightRejectsFENBeforeCommittingTheResetOrDriverState() throws {
+        let original = ChessUpDriver()
+        XCTAssertThrowsError(try DriverCommands.prepare(.loadPosition(fen), driver: original, maximumLength: 1)) {
+            XCTAssertEqual($0 as? ConnectError, .commandTooLarge)
+        }
+        XCTAssertFalse(original.commandPending)
+        var unchanged = original
+        XCTAssertTrue(try receive([0xb1], driver: &unchanged).isEmpty)
+        let prepared = try DriverCommands.prepare(.loadPosition(fen), driver: original, maximumLength: 512)
+        XCTAssertEqual(prepared.packets.count, 2)
+        XCTAssertEqual(prepared.packets[0], Data([0x64]))
+        XCTAssertTrue(prepared.driver.commandPending)
+        XCTAssertFalse(original.commandPending)
+    }
+
 }

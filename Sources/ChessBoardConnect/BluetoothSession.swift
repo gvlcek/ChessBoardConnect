@@ -5,9 +5,10 @@ import Combine
 @MainActor
 final class BluetoothSession: NSObject, ObservableObject {
     @Published private(set) var devices: [BoardDevice] = []
-    @Published private(set) var status = "Bluetooth not started" { didSet { log(status) } }
+    @Published private(set) var status = "Bluetooth not started" { didSet { if status != oldValue { log(status) } } }
     @Published private(set) var ready = false
     @Published private(set) var scanning = false
+    @Published private(set) var canReconnect = false
     @Published private(set) var position: BoardPosition?
     @Published private(set) var lastMove: BoardMove?
     @Published private(set) var logs: [String] = []
@@ -20,6 +21,7 @@ final class BluetoothSession: NSObject, ObservableObject {
     private var central: CBCentralManager!
     private var peripherals: [UUID: CBPeripheral] = [:]
     private var active: CBPeripheral?
+    private var cancelling: Set<UUID> = []
     private var lastDevice: UUID?
     private var command: CBCharacteristic?
     private var notifications: [CBCharacteristic] = []
@@ -46,14 +48,14 @@ final class BluetoothSession: NSObject, ObservableObject {
     func scan() {
         guard active == nil else { return }
         scanRequested = true; connectedLookupRequested = false
-        devices = []; peripherals = [:]
+        devices = []; peripherals = [:]; updateReconnectAvailability()
         if central == nil { central = CBCentralManager(delegate: self, queue: .main) }
         else { startScan() }
     }
     func findConnectedBoards(namePrefix: String?) {
         guard active == nil, !scanning else { return }
         connectedLookupRequested = true; scanRequested = false; lookupNamePrefix = namePrefix?.lowercased()
-        devices = []; peripherals = [:]
+        devices = []; peripherals = [:]; updateReconnectAvailability()
         if central == nil { central = CBCentralManager(delegate: self, queue: .main) }
         else { lookupConnectedBoards() }
     }
@@ -69,13 +71,14 @@ final class BluetoothSession: NSObject, ObservableObject {
             peripherals[peripheral.identifier] = peripheral
             devices.append(BoardDevice(id: peripheral.identifier, name: name, rssi: 127, capabilities: driver.capabilities))
         }
+        updateReconnectAvailability()
         state = .discovered
         status = devices.isEmpty ? "No connected boards found. Connect in the official app and try again." : "Select your board"
     }
     private func startScan() {
         guard central.state == .poweredOn, scanRequested else { return }
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
-        scanning = true; state = .scanning; status = "Scanning for compatible boards…"; log(status)
+        scanning = true; state = .scanning; status = "Scanning for compatible boards…"
         watchdog?.cancel()
         watchdog = Task { [weak self] in
             try? await Task.sleep(for: .seconds(12))
@@ -86,14 +89,15 @@ final class BluetoothSession: NSObject, ObservableObject {
         }
     }
     func connect(_ id: UUID) throws {
-        guard active == nil else { throw ConnectError.busy }
+        guard active == nil, !cancelling.contains(id) else { throw ConnectError.busy }
         guard central?.state == .poweredOn, let peripheral = peripherals[id],
               let name = devices.first(where: { $0.id == id })?.name,
               let selectedDriver = registry.makeDriver(for: name) else { throw ConnectError.deviceNotFound }
         driver = selectedDriver; capabilities = selectedDriver.capabilities; state = .connecting
         watchdog?.cancel(); scanRequested = false; scanning = false; central.stopScan()
         lastDevice = id; active = peripheral; peripheral.delegate = self
-        status = "Connecting to \(peripheral.name ?? "Board")…"; log(status)
+        updateReconnectAvailability()
+        status = "Connecting to \(peripheral.name ?? "Board")…"
         central.connect(peripheral)
         watchdog = Task { [weak self] in
             try? await Task.sleep(for: .seconds(15))
@@ -109,23 +113,34 @@ final class BluetoothSession: NSObject, ObservableObject {
         central?.stopScan(); scanRequested = false; connectedLookupRequested = false; scanning = false
         if active == nil { watchdog?.cancel(); state = .idle; status = "Scan stopped" }
     }
-    var canReconnect: Bool { active == nil && lastDevice != nil }
+    private func updateReconnectAvailability() {
+        canReconnect = active == nil && lastDevice.map {
+            !cancelling.contains($0) && peripherals[$0] != nil && devices.contains(where: { $0.id == lastDevice })
+        } == true
+    }
     var connectedOrConnecting: Bool { active != nil }
     func disconnect() {
         stopScan()
-        if let active { central.cancelPeripheralConnection(active) }
+        cancelActiveConnection()
         reset(); state = .disconnected; status = "Disconnected"
     }
     private func fail(_ message: String) {
         central?.stopScan(); scanRequested = false; connectedLookupRequested = false; scanning = false
-        if let active { central.cancelPeripheralConnection(active) }
+        cancelActiveConnection()
         reset(); state = .failed(message); status = message
+    }
+    private func cancelActiveConnection() {
+        guard let active else { return }
+        active.delegate = nil
+        cancelling.insert(active.identifier)
+        central?.cancelPeripheralConnection(active)
     }
     private func reset() {
         watchdog?.cancel(); writeTask?.cancel(); writeTimeout?.cancel(); replyTimeout?.cancel()
         ready = false; active = nil; command = nil; notifications = []
         queued = []; writing = false; driver = nil; capabilities = []
         position = nil; lastMove = nil
+        updateReconnectAvailability()
     }
     func showLights(_ squares: [Int]) throws {
         guard ready, let driver else { throw ConnectError.notConnected }
@@ -139,7 +154,8 @@ final class BluetoothSession: NSObject, ObservableObject {
         guard ready, let driver else { throw ConnectError.notConnected }
         guard capabilities.contains(.readPosition) else { throw ConnectError.unsupportedCapability }
         position = nil
-        enqueue(try driver.refreshCommand()); waitForPosition()
+        queued.removeAll { $0.kind == .refresh }
+        enqueue(try driver.refreshCommand(), kind: .refresh); waitForPosition()
     }
     func send(_ command: BoardCommand) throws {
         switch command {
@@ -156,11 +172,12 @@ final class BluetoothSession: NSObject, ObservableObject {
         }
     }
     private func prepare(_ command: BoardCommand) throws {
-        guard ready, var selected = driver else { throw ConnectError.notConnected }
-        let packets = try selected.prepare(command)
-        driver = selected
+        guard ready, let driver, let active, let characteristic = self.command else { throw ConnectError.notConnected }
+        let type: CBCharacteristicWriteType = characteristic.properties.contains(.write) ? .withResponse : .withoutResponse
+        let prepared = try DriverCommands.prepare(command, driver: driver, maximumLength: active.maximumWriteValueLength(for: type))
+        self.driver = prepared.driver
         if case .loadPosition = command { lastMove = nil }
-        packets.forEach { enqueue($0) }
+        prepared.packets.forEach { enqueue($0) }
         updateReplyTimeout()
     }
     private func updateReplyTimeout() {
@@ -172,7 +189,7 @@ final class BluetoothSession: NSObject, ObservableObject {
             self?.fail("The board did not confirm the protocol command. Reconnect and load a position before retrying.")
         }
     }
-    private enum CommandKind { case lights, general }
+    private enum CommandKind { case lights, refresh, general }
     private struct PendingCommand { let data: Data; let kind: CommandKind }
     private func enqueue(_ bytes: Data, kind: CommandKind = .general) {
         guard ready else { return }
@@ -209,7 +226,8 @@ final class BluetoothSession: NSObject, ObservableObject {
     }
     private func checkReady() {
         guard !ready, let active, active.state == .connected,
-              command != nil, !notifications.isEmpty, notifications.allSatisfy({ $0.isNotifying }) else { return }
+              command != nil, let profile, notifications.count == profile.notificationIDs.count,
+              !notifications.isEmpty, notifications.allSatisfy({ $0.isNotifying }) else { return }
         watchdog?.cancel(); ready = true; state = .connected
         status = capabilities.contains(.readPosition) ? "Connected · waiting for position" : "Connected · load a full FEN to start a study session"
         driver?.initialCommands.forEach { enqueue($0) }
@@ -252,15 +270,21 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
     }
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         guard active === peripheral else { return }
-        state = .discoveringServices; status = "Discovering services…"; log(status)
+        state = .discoveringServices; status = "Discovering services…"
         peripheral.discoverServices(profile.map { $0.services.keys.map { CBUUID(string: $0) } })
     }
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        guard active === peripheral else { return }; fail("Connection failed: \(error?.localizedDescription ?? "no details")")
+        if cancelling.remove(peripheral.identifier) != nil { updateReconnectAvailability(); return }
+        guard active === peripheral else { return }
+        peripheral.delegate = nil
+        reset(); state = .failed("Connection failed")
+        status = "Connection failed: \(error?.localizedDescription ?? "no details")"
     }
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        if cancelling.remove(peripheral.identifier) != nil { updateReconnectAvailability(); return }
         guard active === peripheral else { return }
-        reset(); state = .disconnected; status = "Connection lost. Reconnect to receive a fresh position."; log(status)
+        peripheral.delegate = nil
+        reset(); state = .disconnected; status = "Connection lost. Reconnect to receive a fresh position."
     }
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard active === peripheral else { return }
@@ -294,7 +318,8 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
                 guard characteristic.properties.contains(.notify) || characteristic.properties.contains(.indicate) else {
                     fail("The data characteristic does not support notifications."); return
                 }
-                notifications.append(characteristic); peripheral.setNotifyValue(true, for: characteristic)
+                if !notifications.contains(where: { $0.uuid == characteristic.uuid }) { notifications.append(characteristic) }
+                peripheral.setNotifyValue(true, for: characteristic)
             }
         }
         checkReady()
@@ -302,10 +327,17 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
         guard active === peripheral else { return }
         if let error { fail(error.localizedDescription); return }
+        if ready, !characteristic.isNotifying {
+            fail("Board notifications stopped. Reconnect before sending commands."); return
+        }
         checkReady()
     }
+    func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
+        guard active === peripheral else { return }
+        fail("Board services changed. Reconnect to rediscover the connection.")
+    }
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard active === peripheral, var receivingDriver = driver,
+        guard ready, active === peripheral, var receivingDriver = driver,
               profile?.notificationIDs.contains(characteristic.uuid.uuidString.lowercased()) == true else { return }
         if let error { position = nil; log("Receive error: \(error.localizedDescription)"); return }
         guard let bytes = characteristic.value else { return }
@@ -317,8 +349,10 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
             for event in events {
                 switch event {
                 case .position(let decoded):
-                    watchdog?.cancel(); state = .receivingPosition
-                    status = "Connected · receiving positions"; position = decoded
+                    watchdog?.cancel()
+                    if state != .receivingPosition { state = .receivingPosition }
+                    if status != "Connected · receiving positions" { status = "Connected · receiving positions" }
+                    position = decoded
                 case .move(let move):
                     lastMove = move
                     log("Board move: \(BoardPosition.name(move.from)) → \(BoardPosition.name(move.to))\(move.promotion.map(String.init) ?? "")")
