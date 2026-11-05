@@ -15,8 +15,11 @@ enum DriverEvent {
     case position(BoardPosition)
     case move(BoardMove)
     case write(Data)
+    case status(String)
 }
 protocol BoardDriver {
+    var commandPending: Bool { get }
+    mutating func prepare(_ command: BoardCommand) throws -> [Data]
     var capabilities: BoardCapabilities { get }
     var profile: BluetoothProfile { get }
     var initialCommands: [Data] { get }
@@ -33,7 +36,8 @@ struct DriverRegistry: Sendable {
             let name = $0.lowercased()
             // Do not attach the classic protocol to Chessnut Move or Evo.
             return name.contains("chessnut") && !name.contains("move") && !name.contains("evo")
-        }, make: { ChessnutDriver() })
+        }, make: { ChessnutDriver() }),
+        DriverRegistration(matches: { $0.lowercased().hasPrefix("chessup") }, make: { ChessUpDriver() })
     ])
     func makeDriver(for name: String) -> (any BoardDriver)? {
         registrations.first(where: { $0.matches(name) })?.make()
@@ -41,6 +45,15 @@ struct DriverRegistry: Sendable {
 }
 
 extension BoardDriver {
+    var commandPending: Bool { false }
+    mutating func prepare(_ command: BoardCommand) throws -> [Data] {
+        switch command {
+        case .sendMove(let move): return [try moveCommand(move)]
+        case .loadPosition(let fen): return [try positionCommand(fen)]
+        case .requestPosition: return [try refreshCommand()]
+        case .setLights(let squares): return [try lightsCommand(squares)]
+        }
+    }
     func moveCommand(_ move: BoardMove) throws -> Data { throw ConnectError.unsupportedCapability }
     func positionCommand(_ fen: String) throws -> Data { throw ConnectError.unsupportedCapability }
 }

@@ -28,9 +28,9 @@ final class ConnectTests: XCTestCase {
         guard case .position(let position) = events.first else { return XCTFail("Missing normalized position") }
         XCTAssertEqual(position, .initial)
     }
-    func testStandardRegistryDoesNotClaimChessUpOrMove() {
+    func testStandardRegistryIncludesChessUpButExcludesMove() {
         XCTAssertNotNil(DriverRegistry.standard.makeDriver(for: "Chessnut Go"))
-        XCTAssertNil(DriverRegistry.standard.makeDriver(for: "ChessUp"))
+        XCTAssertNotNil(DriverRegistry.standard.makeDriver(for: "ChessUp"))
         XCTAssertNil(DriverRegistry.standard.makeDriver(for: "Chessnut Move"))
         XCTAssertNil(DriverRegistry.standard.makeDriver(for: "Chessnut Evo"))
     }

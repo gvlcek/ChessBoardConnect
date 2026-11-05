@@ -8,6 +8,7 @@ public struct BoardCapabilities: OptionSet, Sendable, Equatable {
     public static let controlLights = Self(rawValue: 1 << 1)
     public static let sendMove = Self(rawValue: 1 << 2)
     public static let loadPosition = Self(rawValue: 1 << 3)
+    public static let receiveMoves = Self(rawValue: 1 << 4)
 }
 
 public struct BoardDevice: Identifiable, Equatable, Sendable {
@@ -27,6 +28,7 @@ public enum ConnectionState: Equatable, Sendable {
 
 public enum ConnectError: Error, Equatable, Sendable {
     case notConnected, deviceNotFound, busy, unsupportedCapability, invalidSquare
+    case sessionNotInitialized, invalidFEN
 }
 
 /// Main-actor API: all discovery, transport and manufacturer details stay inside Connect.
@@ -41,6 +43,7 @@ public protocol BoardConnecting: ObservableObject {
     var ready: Bool { get }
     func send(_ command: BoardCommand) throws
     func scan()
+    func findConnectedBoards(namePrefix: String?)
     func stopScan()
     func connect(_ id: UUID) throws
     func disconnect()
@@ -67,4 +70,18 @@ public enum BoardCommand: Sendable {
     case sendMove(BoardMove)
     /// Full FEN, including turn and castling rights. Board support is required.
     case loadPosition(String)
+}
+
+extension ConnectError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .notConnected: "Connect to a board first."
+        case .deviceNotFound: "Board not found. Search again."
+        case .busy: "Wait for the current command to be confirmed before sending another."
+        case .unsupportedCapability: "This operation is not supported by the connected driver."
+        case .invalidSquare: "Enter valid, distinct squares and a valid promotion piece."
+        case .sessionNotInitialized: "Load a full FEN and wait for the study session confirmation first."
+        case .invalidFEN: "Enter a full FEN with valid placement, turn, castling, en passant, and counters (halfmove 0–255, fullmove 1–65535)."
+        }
+    }
 }

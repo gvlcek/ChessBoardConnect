@@ -9,12 +9,15 @@ struct ConnectionLabView: View {
     @State private var lightSquares = "e2 e4"
     @State private var moveFrom = "e2"
     @State private var moveTo = "e4"
-    @State private var fen = ""
+    @State private var promotion = ""
+    @State private var fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     @State private var commandResult = ""
     @State private var errorMessage: String?
     @State private var lastReading: Date?
     @State private var readingCount = 0
     @State private var firmware = ""
+    let chessUpOnly: Bool
+    init(chessUpOnly: Bool = false) { self.chessUpOnly = chessUpOnly }
     private let glyphs: [Character: String] = ["K":"♔", "Q":"♕", "R":"♖", "B":"♗", "N":"♘", "P":"♙", "k":"♚", "q":"♛", "r":"♜", "b":"♝", "n":"♞", "p":"♟"]
 
     var body: some View {
@@ -27,7 +30,9 @@ struct ConnectionLabView: View {
                     LabeledContent("Status", value: stateName)
                     LabeledContent("Selected board", value: selectedName)
                     HStack {
-                        Button("Scan") { connect.scan() }
+                        Button(chessUpOnly ? "Find ChessUp" : "Scan") {
+                            if chessUpOnly { connect.findConnectedBoards(namePrefix: "ChessUp") } else { connect.scan() }
+                        }
                             .disabled(connect.scanning || connect.connectedOrConnecting)
                         if connect.scanning { Button("Stop") { connect.stopScan() } }
                         if connect.connectedOrConnecting {
@@ -36,14 +41,14 @@ struct ConnectionLabView: View {
                             Button("Reconnect") { perform { try connect.reconnect() } }
                         }
                     }.buttonStyle(.bordered)
-                    Text("Turn on the board and disconnect other apps. The first scan requests Bluetooth permission.")
+                    Text(chessUpOnly ? "Connect using the official ChessUp app, return here, and tap Find ChessUp. After connecting, send a full FEN below to start study mode." : "Turn on the board and disconnect other apps. The first scan requests Bluetooth permission.")
                         .font(.caption).foregroundStyle(.secondary)
                 } header: { Text("Connection") }
 
                 if !connect.connectedOrConnecting {
                     Section("Boards found · \(connect.devices.count)") {
                         if connect.devices.isEmpty {
-                            Text(connect.scanning ? "Scanning for compatible devices…" : "Start a scan to select your board.")
+                            Text(connect.scanning ? "Scanning for compatible devices…" : "Search to select your board.")
                                 .foregroundStyle(.secondary)
                         }
                         ForEach(connect.devices) { device in
@@ -56,7 +61,7 @@ struct ConnectionLabView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(device.name).font(.headline)
-                                    Text("\(device.rssi) dBm · \(device.id.uuidString)").font(.caption2.monospaced())
+                                    Text("\(device.rssi == 127 ? "Available through iOS" : "\(device.rssi) dBm") · \(device.id.uuidString)").font(.caption2.monospaced())
                                 }
                             }
                         }
@@ -65,6 +70,7 @@ struct ConnectionLabView: View {
 
                 Section("Connected board capabilities") {
                     capability("Read positions", .readPosition)
+                    capability("Receive moves", .receiveMoves)
                     capability("Control lights", .controlLights)
                     capability("Send moves", .sendMove)
                     capability("Load positions", .loadPosition)
@@ -72,63 +78,72 @@ struct ConnectionLabView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
-                Section("Received position · White at the bottom") {
-                    if let position = connect.position {
-                        boardGrid(position)
-                        Text(position.fen).font(.caption.monospaced()).textSelection(.enabled)
-                    } else {
-                        Text("No current reading").foregroundStyle(.secondary)
-                    }
-                    LabeledContent("Readings this session", value: "\(readingCount)")
-                    if let lastReading {
-                        LabeledContent("Last reading", value: lastReading.formatted(.dateTime.hour().minute().second().locale(Locale(identifier: "en_US_POSIX"))))
-                    }
-                    Button("Request position") { perform { try connect.refresh() } }
-                        .disabled(!supports(.readPosition))
-                    Text("The position above comes from the board. It is not a simulation or a target position.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
-                Section("Lights") {
-                    TextField("Squares, for example e2 e4", text: $lightSquares)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    HStack {
-                        Button("Turn on") {
-                            perform {
-                                let names = lightSquares.lowercased().split { $0.isWhitespace || $0 == "," }
-                                let indices = names.compactMap { BoardPosition.index(String($0)) }
-                                guard !names.isEmpty, indices.count == names.count else { throw LabError.invalidSquares }
-                                try connect.showLights(indices)
-                            }
+                if !chessUpOnly {
+                    Section("Received position · White at the bottom") {
+                        if let position = connect.position {
+                            boardGrid(position)
+                            Text(position.fen).font(.caption.monospaced()).textSelection(.enabled)
+                        } else {
+                            Text("No current reading").foregroundStyle(.secondary)
                         }
-                        Button("Turn all off") { perform { try connect.showLights([]) } }
-                    }.buttonStyle(.bordered).disabled(!supports(.controlLights))
-                    Text("Check the physical board to confirm that the selected squares light up.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
-                if supports(.sendMove) {
-                    Section("Send move") {
-                        TextField("From", text: $moveFrom).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        TextField("To", text: $moveTo).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        Button("Send") {
-                            perform {
-                                guard let from = BoardPosition.index(moveFrom.lowercased()), let to = BoardPosition.index(moveTo.lowercased()) else { throw LabError.invalidSquares }
-                                try connect.send(.sendMove(BoardMove(from: from, to: to)))
-                            }
+                        LabeledContent("Readings this session", value: "\(readingCount)")
+                        if let lastReading {
+                            LabeledContent("Last reading", value: lastReading.formatted(.dateTime.hour().minute().second().locale(Locale(identifier: "en_US_POSIX"))))
                         }
+                        Button("Request position") { perform { try connect.refresh() } }
+                            .disabled(!supports(.readPosition))
+                        Text("The position above comes from the board. It is not a simulation or a target position.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+
+                    Section("Lights") {
+                        TextField("Squares, for example e2 e4", text: $lightSquares)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        HStack {
+                            Button("Turn on") {
+                                perform {
+                                    let names = lightSquares.lowercased().split { $0.isWhitespace || $0 == "," }
+                                    let indices = names.compactMap { BoardPosition.index(String($0)) }
+                                    guard !names.isEmpty, indices.count == names.count else { throw LabError.invalidSquares }
+                                    try connect.showLights(indices)
+                                }
+                            }
+                            Button("Turn all off") { perform { try connect.showLights([]) } }
+                        }.buttonStyle(.bordered).disabled(!supports(.controlLights))
+                        Text("Check the physical board to confirm that the selected squares light up.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 if supports(.loadPosition) {
                     Section("Load position") {
                         TextField("Full FEN", text: $fen, axis: .vertical)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
-                        Button("Send position") { perform { try connect.send(.loadPosition(fen)) } }
+                        Button("Start study session with FEN") { perform { try connect.send(.loadPosition(fen)) } }
+                    }
+                }
+                if supports(.sendMove) {
+                    Section("Send move") {
+                        Text("Load a position first. Wait for the board confirmation in the status before sending another command.").font(.caption).foregroundStyle(.secondary)
+                        TextField("From", text: $moveFrom).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("To", text: $moveTo).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Picker("Promotion", selection: $promotion) {
+                            Text("None").tag("")
+                            Text("Queen").tag("q")
+                            Text("Rook").tag("r")
+                            Text("Bishop").tag("b")
+                            Text("Knight").tag("n")
+                        }
+                        Button("Send") {
+                            perform {
+                                guard let from = BoardPosition.index(moveFrom.lowercased()), let to = BoardPosition.index(moveTo.lowercased()) else { throw LabError.invalidSquares }
+                                try connect.send(.sendMove(BoardMove(from: from, to: to, promotion: promotion.first)))
+                            }
+                        }
                     }
                 }
                 if let move = connect.lastMove {
                     Section("Last reported move") {
-                        Text("\(BoardPosition.name(move.from)) → \(BoardPosition.name(move.to))")
+                        Text("\(BoardPosition.name(move.from)) → \(BoardPosition.name(move.to))\(move.promotion.map(String.init) ?? "")")
                     }
                 }
                 if !commandResult.isEmpty {
@@ -150,7 +165,7 @@ struct ConnectionLabView: View {
                     }
                 }
             }
-            .navigationTitle("Connect Test")
+            .navigationTitle(chessUpOnly ? "ChessUp Test" : "Connect Test")
             .onDisappear { connect.disconnect() }
             .alert("Action failed", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button("Close", role: .cancel) { errorMessage = nil }
@@ -208,6 +223,7 @@ struct ConnectionLabView: View {
         Firmware (entered manually): \(firmware.isEmpty ? "Not provided" : firmware)
         Status: \(stateName)
         Capabilities: \(connect.capabilities.rawValue)
+        Last reported move: \(connect.lastMove.map { BoardPosition.name($0.from) + BoardPosition.name($0.to) + ($0.promotion.map(String.init) ?? "") } ?? "None")
         Current position: \(connect.position?.fen ?? "No reading")
         Readings: \(readingCount)
 
@@ -231,171 +247,4 @@ struct ConnectionLabView: View {
 private enum LabError: LocalizedError {
     case invalidSquares
     var errorDescription: String? { "Enter squares from a1 to h8, separated by spaces or commas. For example: e2 e4." }
-}
-
-/// Focused ChessUp discovery; all Bluetooth operations remain in the package.
-struct ChessUpConnectionLabView: View {
-    @StateObject private var diagnostics = BoardDiagnostics(namePrefix: "ChessUp")
-    @State private var firmware = ""
-    @State private var notes = ""
-    @State private var errorMessage: String?
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Connection") {
-                    Label(connectionStatus, systemImage: diagnostics.state == .inspected ? "checkmark.circle" : "antenna.radiowaves.left.and.right")
-                    if diagnostics.state.connectionActive, let selected = diagnostics.selectedDevice {
-                        LabeledContent("Board", value: selected.name)
-                    }
-                    HStack {
-                        Button("Find ChessUp") { diagnostics.checkConnectedDevices() }
-                            .disabled(diagnostics.state.isScanning || diagnostics.state.connectionActive)
-                        if diagnostics.state.isScanning {
-                            Button("Stop") { diagnostics.stopScan() }
-                        }
-                        if diagnostics.state.connectionActive {
-                            Button("Disconnect") { diagnostics.disconnect() }
-                        }
-                    }.buttonStyle(.bordered)
-                    Text("Open the official ChessUp app and wait for it to connect. Return here without force-closing it, then tap Find ChessUp and select your board.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    if diagnostics.state == .inspected {
-                        Text("Bluetooth connection verified. Sending moves and receiving board events still require a ChessUp driver.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                if !diagnostics.state.connectionActive {
-                    Section("Boards found · \(diagnostics.devices.count)") {
-                        if diagnostics.devices.isEmpty {
-                            Text(diagnostics.state.isScanning ? "Looking for ChessUp…" : "No ChessUp found yet.")
-                                .foregroundStyle(.secondary)
-                        }
-                        ForEach(diagnostics.devices) { device in
-                            Button {
-                                do { try diagnostics.inspect(device.id) }
-                                catch { errorMessage = error.localizedDescription }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Connect to \(device.name)").font(.headline)
-                                    Text(device.source == .systemConnection ? "Available through iOS" : "Nearby board")
-                                        .font(.caption)
-                                    if device.isConnectable == false {
-                                        Text("Board is not accepting connections").font(.caption)
-                                    }
-                                    if diagnostics.devices.count > 1 {
-                                        Text(device.id.uuidString).font(.caption2.monospaced())
-                                    }
-                                }
-                            }
-                            .disabled(diagnostics.state.isScanning || device.isConnectable == false)
-                        }
-                    }
-                }
-                Section {
-                    DisclosureGroup("More connection options") {
-                        Button("Scan nearby ChessUp") { diagnostics.scan() }
-                            .disabled(diagnostics.state.isScanning || diagnostics.state.connectionActive)
-                        Text("Fallback for boards advertising directly. Scans for 15 seconds and shows only names starting with ChessUp. Each search starts a fresh report.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Section {
-                    DisclosureGroup("Technical details") {
-                        Text(diagnostics.status).font(.caption).foregroundStyle(.secondary)
-                        if let selected = diagnostics.selectedDevice {
-                            LabeledContent("Name", value: selected.name)
-                            LabeledContent("Source", value: selected.source.rawValue)
-                            Text(selected.id.uuidString).font(.caption.monospaced()).textSelection(.enabled)
-                            Text("RSSI: \(selected.rssi == 127 ? "Unavailable" : "\(selected.rssi) dBm") · Connectable: \(connectableText(selected.isConnectable))")
-                                .font(.caption)
-                            Text("Inspection snapshot: \(diagnostics.inspectionCompleted ? "Complete" : "Incomplete or pending")")
-                                .font(.caption)
-                        }
-                        ForEach(Array(diagnostics.services.enumerated()), id: \.offset) { _, service in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Service \(service.uuid)").font(.caption.monospaced()).textSelection(.enabled)
-                                ForEach(Array(service.characteristics.enumerated()), id: \.offset) { _, characteristic in
-                                    Text("\(characteristic.uuid) [\(characteristic.properties.joined(separator: ", "))]")
-                                        .font(.caption2.monospaced()).textSelection(.enabled)
-                                }
-                            }
-                        }
-                    }
-                }
-                Section("Logs") {
-                    ShareLink(item: report) { Label("Export report", systemImage: "square.and.arrow.up") }
-                    Button("Clear logs", systemImage: "trash") { diagnostics.clearLogs() }
-                        .disabled(diagnostics.logs.isEmpty)
-                    Text("Clearing logs keeps the connection and inspection snapshot.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    DisclosureGroup("Test notes") {
-                        TextField("Board firmware (optional)", text: $firmware)
-                        TextField("Test conditions (optional)", text: $notes, axis: .vertical)
-                    }
-                    DisclosureGroup("Recent events") {
-                        ForEach(Array(diagnostics.logs.suffix(12).enumerated()), id: \.offset) { _, line in
-                            Text(line).font(.caption2.monospaced()).textSelection(.enabled)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("ChessUp Connection")
-            .onDisappear { diagnostics.disconnect() }
-            .alert("Connection failed", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("Close", role: .cancel) { errorMessage = nil }
-            } message: { Text(errorMessage ?? "") }
-        }
-    }
-    private var connectionStatus: String {
-        switch diagnostics.state {
-        case .idle: "Ready to find ChessUp"
-        case .waitingForBluetooth: "Waiting for Bluetooth…"
-        case .scanning: "Looking for nearby ChessUp…"
-        case .scanComplete: diagnostics.devices.isEmpty ? "No ChessUp found. Check the official app's connection and try again." : "Select your ChessUp below"
-        case .connecting: "Connecting to ChessUp…"
-        case .discoveringServices: "Checking Bluetooth services…"
-        case .inspected: "Connected · Bluetooth services inspected"
-        case .disconnected: "Disconnected"
-        case .failed(let message): message
-        }
-    }
-    private func connectableText(_ value: Bool?) -> String {
-        value.map { $0 ? "Yes" : "No" } ?? "Unknown"
-    }
-    private var report: String {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        let selected = diagnostics.selectedDevice
-        let gatt = diagnostics.services.map { service in
-            let characteristics = service.characteristics.map { "  \($0.uuid) [\($0.properties.joined(separator: ", "))]" }.joined(separator: "\n")
-            return "Service \(service.uuid) (\(service.isPrimary ? "primary" : "secondary"))\n\(characteristics)"
-        }.joined(separator: "\n\n")
-        return """
-        ChessBoardConnect · ConnectTestApp \(version) (\(build))
-        Mode: ChessUp connection (metadata only; no characteristic values or board commands)
-        Name filter: ChessUp prefix (case-insensitive; no fixed peripheral identifier)
-        Date: \(Date().formatted(.iso8601))
-        Device: \(UIDevice.current.model), \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)
-        Status: \(diagnostics.status)
-        Inspection complete: \(diagnostics.inspectionCompleted)
-        Matching devices discovered: \(diagnostics.devices.count)
-        Selected name: \(selected?.name ?? "None")
-        Discovery source: \(selected?.source.rawValue ?? "None")
-        System lookup filter (when used): Nordic UART 6e400001-b5a3-f393-e0a9-e50e24dcca9e (not unique to ChessUp)
-        Selected identifier: \(selected?.id.uuidString ?? "None")
-        Advertised local name: \(selected?.source == .systemConnection ? "Not collected (system lookup)" : selected?.localName ?? "Not advertised")
-        Advertised services: \(selected?.source == .systemConnection ? "Not collected (system lookup)" : selected?.advertisedServices.joined(separator: ", ") ?? "None")
-        Advertised connectable: \(connectableText(selected?.isConnectable))
-        Selected RSSI: \(selected.map { $0.rssi == 127 ? "Unavailable" : "\($0.rssi) dBm" } ?? "Not recorded")
-        Firmware (entered manually): \(firmware.isEmpty ? "Not provided" : firmware)
-        Test conditions: \(notes.isEmpty ? "Not provided" : notes)
-
-        GATT snapshot:
-        \(gatt.isEmpty ? "No service metadata collected" : gatt)
-
-        Events:
-        \(diagnostics.logs.joined(separator: "\n"))
-        """
-    }
 }

@@ -19,7 +19,7 @@ private struct LabRootView: View {
             .padding(.bottom, 16)
             // Conditional views release the previous session when changing modes.
             if mode == .board { ConnectionLabView() }
-            else { ChessUpConnectionLabView() }
+            else { ConnectionLabView(chessUpOnly: true) }
         }
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
     }

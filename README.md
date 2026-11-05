@@ -49,9 +49,10 @@ SwiftUI apps can observe `BoardConnect` with `@StateObject` and its published pr
 ## Contract
 
 - `devices`: discovered compatible devices, including identity, name, signal strength, and capabilities.
+- `findConnectedBoards(namePrefix:)`: discover supported peripherals already connected to iOS, including those held by another app. `scan()` remains the advertisement path. Missing RSSI is represented as 127 (unavailable).
 - `state`: typed states for scanning, connecting, receiving, disconnecting, and failure. `status` provides a diagnostic description.
 - `position`: the placement of all 64 squares, normalized as the first FEN field. It does not infer the turn, castling rights, or legality.
-- `lastMove`: the last move reported by a driver that emits moves. The current Chessnut driver delivers positions and does not infer moves.
+- `lastMove`: the last move reported by a driver that emits moves. The Chessnut driver delivers positions and does not infer moves. The ChessUp driver delivers move events without claiming a sensor position.
 - `capabilities`: whether the connected board supports reading positions, controlling lights, sending moves, or loading positions.
 - `send`: common commands. Throws `unsupportedCapability` when the connected driver does not provide the requested operation. A successful return means the command was queued, not that a person moved the pieces.
 - `showLights` / `refresh`: shortcuts for the corresponding commands.
@@ -66,7 +67,7 @@ Public square indices run from a8=0 to h8=7, then down to a1=56 through h1=63. U
 | Driver | Status | Current capabilities |
 | --- | --- | --- |
 | Classic Chessnut | Connection and incoming frames observed on Go; full hardware checklist pending | Read positions, control lights |
-| ChessUp / ChessUp 2 | Local connection and GATT inspection observed on ChessUp 2; game driver not implemented or registered | None advertised |
+| ChessUp / ChessUp 2 | Experimental UART driver; protocol hardware validation pending | Receive moves, send moves, load full FEN |
 
 The classic registry recognizes Chessnut names and explicitly excludes Move and Evo, which must not receive this protocol based only on the brand name. Go is the target for physical testing; compatibility with every classic firmware version is not guaranteed.
 
@@ -97,7 +98,7 @@ Open `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, select your signing tea
 
 It does not expose characteristic value reads, writes, notification subscriptions, or game commands. The public snapshots contain plain Swift values, not Core Bluetooth objects. Disconnected snapshots are retained for export; the connection state remains separate from inspection completion. `selectForReport` can capture an advertisement without connecting, including advertisements marked non-connectable.
 
-The test app's **ChessUp** screen uses the filtered system lookup as its main flow. The manual filter and generic BLE list are no longer exposed there; technical details and a filtered advertisement fallback remain expandable. Generic inspection APIs are retained for investigating future boards. See the [test app guide](Examples/ConnectTestApp/README.md#chessup-connection) for the physical test procedure and observed hardware results. Tests use an injected metadata transport; real radio/GATT behavior must still be verified with your board. The driver registry and normal board connection API are unchanged.
+The test app's **ChessUp** screen now uses `BoardConnect` and the experimental ChessUp driver. The metadata-only API remains reusable for future boards. See the [test app guide](Examples/ConnectTestApp/README.md#chessup-study-protocol-experimental) for the explicit FEN/start handshake, protocol acknowledgment handling, promotion update semantics, and physical validation procedure. `ready` means BLE writes and notifications are available; a ChessUp move also requires an explicitly initialized study session. `send` returning successfully means queued; status/logs record protocol confirmations. Missing protocol replies time out and disconnect rather than silently retrying moves. The package does not expose raw manufacturer commands to consumer apps. No game engine, legality checks, or sensor positions are inferred by the ChessUp driver.
 
 ## Tests
 

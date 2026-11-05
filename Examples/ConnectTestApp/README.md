@@ -16,7 +16,7 @@ The project references the package at `../..`, so it works both from an independ
 ## Screens and controls
 
 - **Connection:** module status, scanning, stopping a scan, board selection, disconnecting, and reconnecting.
-- **Capabilities:** reading positions, controlling lights, sending moves, and loading positions, as reported by the connected driver. The current Go implementation offers reading and lights. ChessUp is not implemented yet.
+- **Capabilities:** reading positions, controlling lights, sending moves, and loading positions, as reported by the connected driver. The current Go implementation offers reading and lights. ChessUp provides an experimental move/FEN protocol, pending hardware validation.
 - **Position:** all 64 received squares, coordinates, and the first FEN field, plus a counter and the last reading time. Disconnecting or requesting a new reading invalidates the previous position.
 - **Lights:** enter squares such as `e2 e4` or `a1, h8`, turn them on, and turn all lights off. Invalid input is rejected.
 - **Moves / FEN:** controls appear only when a driver advertises these capabilities; they are not simulated for the Go.
@@ -26,49 +26,28 @@ An accepted command is **queued**. The app's confirmation does not prove that th
 
 Both modes provide a **Clear logs** button beside the export controls. It clears the recorded events without disconnecting, resetting reading counters, or removing position/GATT snapshots. New events continue to appear while a session is active; exported reports still include their current summary and snapshot.
 
-## ChessUp connection
+## ChessUp study protocol (experimental)
 
-The mode selector switches between **Board test** (registered drivers, such as the Go) and **ChessUp** (connection and service inspection before a game driver exists). Switching modes stops and disconnects the previous session. All Bluetooth code remains in the package.
+The **ChessUp** tab now uses the normal `BoardConnect` facade and its ChessUp driver, including notifications and commands. Driver-independent `BoardDiagnostics` remains available in the package for future investigations.
 
-The main flow follows the successful ChessUp 2 hardware test:
+1. Connect the board in the official ChessUp app, then return without force-closing it.
+2. Select **ChessUp → Find ChessUp**, then select your board. Discovery uses supported services and the `ChessUp` name prefix, with the current iOS identifier. No fixed board UUID is stored.
+3. Wait for the connection status. The module enables UART notifications but sends no game commands automatically.
+4. Put the pieces in the starting position. **Load position** contains its full FEN by default. Tap **Start study session with FEN**.
+5. Wait for **ChessUp study session confirmed. Ready for moves.** The driver sends start (`64`), encoded FEN (`66`), then waits for FEN acknowledgment (`B1`) before sending study settings (`B9`). It waits for settings acknowledgment (`24`) before accepting moves.
+6. Move `e2 → e4` physically. Look for **Last reported move** and RX `A3 35 04 01 04 03`, followed by TX acknowledgment `21`. Export the log with firmware and actual behavior if the bytes differ.
+7. Start a fresh session at the initial position before testing an outgoing `e2 → e4` command. Wait for confirmation in the status, then observe the board and move the physical pieces as instructed by it. A queued command or protocol acknowledgment does not prove physical execution.
+8. Repeat separately for Black, castling, captures, and promotion after the basic exchange works. Both-color replay and the study settings remain experimental on ChessUp 2.
 
-1. Open the official ChessUp app and wait for it to connect to the board.
-2. Return to ConnectTestApp without force-closing the official app.
-3. Select **ChessUp → Find ChessUp**. This looks up peripherals already connected to iOS that expose Nordic UART, then keeps names starting with `ChessUp` (case-insensitive).
-4. Tap **Connect to ChessUp**. The module opens its own Core Bluetooth connection and inspects the services. It does not connect automatically just because a matching name was found.
-5. Wait for **Connected · Bluetooth services inspected**. Tap **Disconnect** when finished.
+The protocol exposes **Receive moves**, **Send moves**, and **Load positions**. It does not expose sensor positions, arbitrary lights, or a position refresh. Loaded FENs are commands, not sensor readings, so the test app does not show them as received positions. It does not validate chess legality or infer full game state.
 
-No individual board UUID is stored in the app. Every search uses the identifiers returned by iOS, so the flow can work with another ChessUp or iPhone. Names such as `ChessUp 2` also match; unrelated and unnamed devices are omitted. A name match is a discovery filter, not device authentication or proof of protocol compatibility.
+Commands are serialized at the protocol level. Sending another command while waiting for a reply produces a local error. An eight-second missing-reply timeout disconnects the session; commands are not automatically retried because a move may already have been accepted. Reconnect and explicitly load FEN to recover. Writes that exceed the connection's maximum supported size fail rather than being truncated.
 
-The manual name filter, all-device list, separate report selection, and always-visible UUID/GATT fields have been removed from this screen. **Technical details** retains the selected identifier, discovery source, signal/connectability information, and GATT snapshot. Identifiers are shown in the board list only when needed to distinguish multiple matches.
+Promotion handling sends the piece choice after the move acknowledgment and waits for promotion acknowledgment. Incoming promotion produces an initial move followed by the same move with its promotion choice; consumers must treat that second event as an update, not another ply. Castling coordinates remain the standard king move (`e1g1`, etc.). Unknown notifications remain visible in raw RX logs; malformed recognized packets are discarded and logged. The parser currently expects each recognized protocol message in one notification, as in the inspected integration; split or combined messages require hardware evidence before extending framing.
 
-**Logs** keeps **Export report**, **Clear logs**, and expandable **Recent events** and **Test notes**. Exports still include the selected board's metadata, inspection completeness, firmware/conditions if entered, and the last 200 events. Export a failure before starting another search; a new search resets the discovery report. Disconnecting or clearing logs retains the collected snapshot.
+**Export log** includes current status, last reported move, and up to 200 TX/RX/events. **Clear logs** keeps the connection. Switching tabs disconnects the previous session. The system-connected lookup remains distinct from advertisement scanning; unavailable RSSI is labeled accordingly.
 
-### Optional advertisement scan
-
-**More connection options → Scan nearby ChessUp** retains a 15-second advertisement scan, using the same name prefix filter. It is a fallback for boards that advertise directly. Direct advertisement discovery without the official app has not been verified on the tested ChessUp 2, so this is not the main connection path.
-
-The system lookup is separate from advertisement scanning and does not enumerate all paired devices. Nordic UART is shared by other products. Rows and reports retain the discovery source; advertisement fields and RSSI are not invented for system-connected results. An empty result does not prove a vendor lock or that Bluetooth is disabled.
-
-Reference: [Apple's retrieveConnectedPeripherals(withServices:) documentation](https://developer.apple.com/documentation/corebluetooth/cbcentralmanager/retrieveconnectedperipherals(withservices:)).
-
-The successful test confirmed a local connection, Nordic UART write (`6e400002…`) and notify (`6e400003…`) characteristics, and the battery service. This mode still does not read values, write data, enable notifications, start games, or modify settings. Those operations need a ChessUp driver in the module. Independent reconnection without the official app remains unverified. The original Chessnut test remains under **Board test**.
-
-### Diagnostic checks
-
-| Check | Expected result |
-| --- | --- |
-| Find ChessUp after the official app connects | Shows matching system-connected UART peripherals only |
-| Find another ChessUp or use another iPhone | Uses that discovery's identifier; no fixed board UUID |
-| Scan nearby ChessUp | Shows only matching names if the board is advertising |
-| Repeat advertisements | Updates the existing device entry rather than creating duplicates |
-| Unrelated or unnamed UART peripheral | Does not appear in the ChessUp list |
-| Connect to a selected board | Inspects UUIDs and property flags; no commands or value reads |
-| Non-connectable advertisement | Connection button is disabled |
-| Expand Technical details | Shows the snapshot and original transport status |
-| Disconnect after inspection | Retains the snapshot for export and releases the connection |
-| Switch test modes | Disconnects the previous mode; no board commands are sent by diagnostics |
-| Discovery times out or fails | Marks the report incomplete and keeps partial evidence |
+Previously verified on hardware: system-connected lookup, local connection, and UART/GATT service discovery. New driver notification subscriptions, handshake, command acknowledgments, move coordinates, and promotion behavior still require this physical test. Packet tests and successful compilation do not establish firmware compatibility.
 
 ## Hardware checklist
 

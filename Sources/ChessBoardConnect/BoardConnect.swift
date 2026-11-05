@@ -32,6 +32,8 @@ public final class BoardConnect: BoardConnecting {
     }
     public func send(_ command: BoardCommand) throws { try session.send(command) }
     public func scan() { session.scan() }
+    /// Finds supported boards already connected to iOS, including by another app.
+    public func findConnectedBoards(namePrefix: String? = nil) { session.findConnectedBoards(namePrefix: namePrefix) }
     public func stopScan() { session.stopScan() }
     public func connect(_ id: UUID) throws { try session.connect(id) }
     public func disconnect() { session.disconnect() }
