@@ -24,6 +24,37 @@ The project references the package at `../..`, so it works both from an independ
 
 An accepted command is **queued**. The app's confirmation does not prove that the firmware executed it or that the pieces were moved. Check the board and its readings.
 
+## BLE diagnostics for ChessUp discovery
+
+The mode selector at the top switches between **Board test** (registered drivers, such as the Go) and **BLE diagnostics** (driver-independent discovery). Switching modes stops and disconnects the previous session. All Bluetooth code remains in the package.
+
+To investigate a ChessUp 2:
+
+1. Fully close the official ChessUp app and other board apps on nearby phones/tablets. Turn off other boards to reduce ambiguity.
+2. Restart the ChessUp and leave it on its home screen. Record its firmware version; Wi-Fi may stay enabled.
+3. Select **BLE diagnostics** and tap **Scan all BLE**. The scan lasts 15 seconds and includes devices with no registered driver or advertised name.
+4. Look for `ChessUp`. If necessary, use the optional name filter; clear it to see unnamed advertisements. Each entry shows its iOS identifier, signal strength, advertised services, and connectability flag. Missing advertised service UUIDs do not imply that GATT services are absent.
+5. Tap **Select for report** to capture an advertisement without connecting (including non-connectable devices). To investigate further, tap **Inspect GATT** on your own board. This opens a connection and lists all discovered services, characteristics, and property flags.
+6. Enter the firmware and test conditions, then choose **Export BLE report**. Export even if the connection fails: it separates successful discovery from a failed connection or incomplete service inspection.
+7. Disconnect before opening the official app again. You can compare scans before opening the official app and after fully closing it; when an app holds a connection, the board may advertise differently or stop advertising.
+
+This mode does not read characteristic values, write data, enable notifications, start games, or modify board settings. It does perform normal BLE connection and GATT discovery requests. Successfully listing services does not imply support for chess moves. An empty scan alone does not establish that Bluetooth is disabled or restricted to the official app.
+
+The exported report retains the selected advertisement and any collected service snapshot after disconnection, marks incomplete inspections, and records diagnostic events. Nearby devices that were never selected are not logged by name. A new scan starts a fresh report. Identifiers are assigned by iOS, not hardware MAC addresses. The original Chessnut test remains available under **Board test**.
+
+### Diagnostic checks
+
+| Check | Expected result |
+| --- | --- |
+| Scan with no driver for ChessUp | Its advertisement can still appear if the board is advertising |
+| Repeat advertisements | Updates the existing device entry rather than creating duplicates |
+| Device without a name | Appears as an unnamed device; clear the UI filter to see it |
+| Select a non-connectable advertisement | Can export it without attempting a connection |
+| Inspect a selected device | Lists UUIDs and property flags only; no commands or value reads |
+| Disconnect after inspection | Retains the snapshot for export and releases the connection |
+| Switch test modes | Disconnects the previous mode; no board commands are sent by diagnostics |
+| Discovery times out or fails | Marks the report incomplete and keeps partial evidence |
+
 ## Hardware checklist
 
 Record the board model, firmware, iPhone, and iOS version:

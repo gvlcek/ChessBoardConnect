@@ -88,6 +88,14 @@ The package can be moved to an independent repository while keeping its `Package
 
 Open `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, select your signing team, and run on a physical iPhone. The example's guide includes a hardware checklist. Recommended workflow: package tests → test app with a physical board → Chess Dex integration.
 
+## Driver-independent BLE diagnostics
+
+`BoardDiagnostics` provides an optional metadata-only inspection API, used by the test app's **BLE diagnostics** mode. It scans without manufacturer/driver filters and can inspect a selected device's GATT services and characteristic properties. This allows investigation of ChessUp discovery before a ChessUp driver exists.
+
+It does not expose characteristic value reads, writes, notification subscriptions, or game commands. The public snapshots contain plain Swift values, not Core Bluetooth objects. Disconnected snapshots are retained for export; the connection state remains separate from inspection completion. `selectForReport` can capture an advertisement without connecting, including advertisements marked non-connectable.
+
+See the [test app guide](Examples/ConnectTestApp/README.md#ble-diagnostics-for-chessup-discovery) for the physical test procedure. Tests use an injected metadata transport; real radio/GATT behavior must still be verified with your board. The driver registry and normal board connection API are unchanged.
+
 ## Tests
 
 ```sh

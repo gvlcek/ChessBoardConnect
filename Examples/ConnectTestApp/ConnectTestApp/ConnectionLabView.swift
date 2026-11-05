@@ -147,6 +147,7 @@ struct ConnectionLabView: View {
                 }
             }
             .navigationTitle("Connect Test")
+            .onDisappear { connect.disconnect() }
             .alert("Action failed", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button("Close", role: .cancel) { errorMessage = nil }
             } message: { Text(errorMessage ?? "") }
@@ -226,4 +227,143 @@ struct ConnectionLabView: View {
 private enum LabError: LocalizedError {
     case invalidSquares
     var errorDescription: String? { "Enter squares from a1 to h8, separated by spaces or commas. For example: e2 e4." }
+}
+
+/// Metadata inspection without any game driver, characteristic reads or commands.
+struct BLEDiagnosticLabView: View {
+    @StateObject private var diagnostics = BoardDiagnostics()
+    @State private var filter = ""
+    @State private var firmware = ""
+    @State private var notes = ""
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Driver-independent discovery") {
+                    Text("Use this mode to find ChessUp or other BLE devices before a board driver exists.")
+                    Text("Scans all nearby BLE advertisements. Inspect only your board. This mode discovers service metadata; it does not read values, subscribe to notifications, or send board commands.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Label(diagnostics.status, systemImage: diagnostics.inspectionCompleted ? "checkmark.circle" : "antenna.radiowaves.left.and.right")
+                    HStack {
+                        Button("Scan all BLE") { diagnostics.scan() }
+                            .disabled(diagnostics.state.isScanning || diagnostics.state.connectionActive)
+                        if diagnostics.state.isScanning {
+                            Button("Stop") { diagnostics.stopScan() }
+                        }
+                        if diagnostics.state.connectionActive {
+                            Button("Disconnect") { diagnostics.disconnect() }
+                        }
+                    }.buttonStyle(.bordered)
+                    Text("For ChessUp: fully close the official app on nearby devices, restart the board, leave it on the home screen, and scan. The Wi-Fi icon alone does not tell us whether BLE is advertising.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Nearby devices · \(diagnostics.devices.count)") {
+                    TextField("Filter by name (optional)", text: $filter)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Text("The filter affects this list only. Clear it to see unnamed devices too.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if visibleDevices.isEmpty {
+                        Text("No matching advertisements received. An empty scan does not prove that Bluetooth is disabled.")
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(visibleDevices) { device in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(device.name).font(.headline)
+                            Text(device.id.uuidString).font(.caption2.monospaced()).textSelection(.enabled)
+                            Text("RSSI: \(device.rssi == 127 ? "Unavailable" : "\(device.rssi) dBm") · Connectable: \(connectableText(device.isConnectable))")
+                                .font(.caption)
+                            Text("Advertised services: \(device.advertisedServices.isEmpty ? "None advertised" : device.advertisedServices.joined(separator: ", "))")
+                                .font(.caption2.monospaced()).textSelection(.enabled)
+                            Button("Select for report") {
+                                do { try diagnostics.selectForReport(device.id) }
+                                catch { errorMessage = error.localizedDescription }
+                            }.disabled(diagnostics.state.connectionActive)
+                            Button("Inspect GATT") {
+                                do { try diagnostics.inspect(device.id) }
+                                catch { errorMessage = error.localizedDescription }
+                            }
+                            .disabled(diagnostics.state.connectionActive || device.isConnectable == false)
+                        }.padding(.vertical, 4)
+                    }
+                }
+                if let selected = diagnostics.selectedDevice {
+                    Section("Selected device snapshot") {
+                        LabeledContent("Name", value: selected.name)
+                        LabeledContent("Local name", value: selected.localName ?? "Not advertised")
+                        Text(selected.id.uuidString).font(.caption.monospaced()).textSelection(.enabled)
+                        Text("Inspection: \(diagnostics.inspectionCompleted ? "Complete snapshot" : "Incomplete or pending")")
+                        Text("\(diagnostics.services.count) services discovered. GATT access alone does not establish chess compatibility.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                ForEach(Array(diagnostics.services.enumerated()), id: \.offset) { _, service in
+                    Section("Service \(service.uuid)") {
+                        Text(service.isPrimary ? "Primary service" : "Secondary service").font(.caption)
+                        ForEach(Array(service.characteristics.enumerated()), id: \.offset) { _, characteristic in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(characteristic.uuid).font(.caption.monospaced()).textSelection(.enabled)
+                                Text(characteristic.properties.isEmpty ? "No properties reported" : characteristic.properties.joined(separator: ", "))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                Section("Export inspection report") {
+                    TextField("Board firmware (optional)", text: $firmware)
+                    TextField("Test conditions: board screen, official app closed, etc.", text: $notes, axis: .vertical)
+                    ShareLink(item: report) { Label("Export BLE report", systemImage: "square.and.arrow.up") }
+                    Text("Includes the selected device's name, identifier, advertised services, discovered GATT metadata, and the last 200 diagnostic events. Other nearby device names are not included.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(Array(diagnostics.logs.suffix(12).enumerated()), id: \.offset) { _, line in
+                        Text(line).font(.caption2.monospaced()).textSelection(.enabled)
+                    }
+                }
+            }
+            .navigationTitle("BLE Diagnostics")
+            .onDisappear { diagnostics.disconnect() }
+            .alert("Inspection failed", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                Button("Close", role: .cancel) { errorMessage = nil }
+            } message: { Text(errorMessage ?? "") }
+        }
+    }
+    private var visibleDevices: [BLEDiagnosticDevice] {
+        let query = filter.trimmingCharacters(in: .whitespacesAndNewlines)
+        return diagnostics.devices.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
+    }
+    private func connectableText(_ value: Bool?) -> String {
+        value.map { $0 ? "Yes" : "No" } ?? "Unknown"
+    }
+    private var report: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        let selected = diagnostics.selectedDevice
+        let gatt = diagnostics.services.map { service in
+            let characteristics = service.characteristics.map { "  \($0.uuid) [\($0.properties.joined(separator: ", "))]" }.joined(separator: "\n")
+            return "Service \(service.uuid) (\(service.isPrimary ? "primary" : "secondary"))\n\(characteristics)"
+        }.joined(separator: "\n\n")
+        return """
+        ChessBoardConnect · ConnectTestApp \(version) (\(build))
+        Mode: BLE metadata-only diagnostics (no characteristic values or board commands)
+        Date: \(Date().formatted(.iso8601))
+        Device: \(UIDevice.current.model), \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)
+        Status: \(diagnostics.status)
+        Inspection complete: \(diagnostics.inspectionCompleted)
+        Devices discovered: \(diagnostics.devices.count)
+        Selected name: \(selected?.name ?? "None")
+        Selected identifier: \(selected?.id.uuidString ?? "None")
+        Advertised local name: \(selected?.localName ?? "Not advertised")
+        Advertised services: \(selected?.advertisedServices.joined(separator: ", ") ?? "None")
+        Advertised connectable: \(connectableText(selected?.isConnectable))
+        Selected RSSI: \(selected.map { $0.rssi == 127 ? "Unavailable" : "\($0.rssi) dBm" } ?? "Not recorded")
+        Firmware (entered manually): \(firmware.isEmpty ? "Not provided" : firmware)
+        Test conditions: \(notes.isEmpty ? "Not provided" : notes)
+
+        GATT snapshot:
+        \(gatt.isEmpty ? "No service metadata collected" : gatt)
+
+        Events:
+        \(diagnostics.logs.joined(separator: "\n"))
+        """
+    }
 }
