@@ -127,4 +127,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and hardware reports, and [the
 
 ## License
 
-[MIT](LICENSE) · Copyright 2026 Guadalupe Vlcek.
+[MIT](LICENSE) · Copyright 2026 Guadalupe Vlček.
