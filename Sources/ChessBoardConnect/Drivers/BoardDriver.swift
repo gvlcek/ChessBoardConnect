@@ -1,0 +1,46 @@
+import Foundation
+
+/// Extend the internal registry to add a board without changing a consumer app.
+/// Each connection receives a fresh driver and its own protocol state.
+struct DriverRegistration: Sendable {
+    let matches: @Sendable (String) -> Bool
+    let make: @Sendable () -> any BoardDriver
+}
+struct BluetoothProfile {
+    let services: [String: [String]]
+    let notificationIDs: Set<String>
+    let writeID: String
+}
+enum DriverEvent {
+    case position(BoardPosition)
+    case move(BoardMove)
+    case write(Data)
+}
+protocol BoardDriver {
+    var capabilities: BoardCapabilities { get }
+    var profile: BluetoothProfile { get }
+    var initialCommands: [Data] { get }
+    func moveCommand(_ move: BoardMove) throws -> Data
+    func positionCommand(_ fen: String) throws -> Data
+    func refreshCommand() throws -> Data
+    func lightsCommand(_ squares: [Int]) throws -> Data
+    mutating func receive(_ data: Data, characteristic: String) throws -> [DriverEvent]
+}
+struct DriverRegistry: Sendable {
+    let registrations: [DriverRegistration]
+    static let standard = Self(registrations: [
+        DriverRegistration(matches: {
+            let name = $0.lowercased()
+            // Do not attach the classic protocol to Chessnut Move or Evo.
+            return name.contains("chessnut") && !name.contains("move") && !name.contains("evo")
+        }, make: { ChessnutDriver() })
+    ])
+    func makeDriver(for name: String) -> (any BoardDriver)? {
+        registrations.first(where: { $0.matches(name) })?.make()
+    }
+}
+
+extension BoardDriver {
+    func moveCommand(_ move: BoardMove) throws -> Data { throw ConnectError.unsupportedCapability }
+    func positionCommand(_ fen: String) throws -> Data { throw ConnectError.unsupportedCapability }
+}
