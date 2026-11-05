@@ -14,6 +14,12 @@ xcodebuild -project Examples/ConnectTestApp/ConnectTestApp.xcodeproj \
 
 To test on an iPhone, copy the example signing template to the ignored local configuration. Never commit that local file, account credentials, or personal device reports.
 
+## Changelog
+
+Add a concise entry under **Unreleased** in [CHANGELOG.md](CHANGELOG.md) for notable changes. Describe the effect on library users or example app users, using the relevant `Added`, `Changed`, `Fixed`, or `Removed` section. Keep hardware support claims tied to actual validation.
+
+When publishing a release, move the pending entries into a section with the version and release date, update the comparison links, and leave an empty **Unreleased** section for future work. Do not rewrite an existing release entry to include changes made after its tag.
+
 ## Board drivers
 
 Keep transport and manufacturer details inside the package. Add independent packet fixtures, normalize coordinates, and advertise only implemented capabilities. Distinguish queued writes, protocol acknowledgments, and physical actions. Do not infer sensor positions from commands or claim firmware support from compilation alone.
