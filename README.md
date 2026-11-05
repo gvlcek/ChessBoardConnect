@@ -80,6 +80,12 @@ Todo se cambia dentro de este paquete:
 
 El paquete puede copiarse a un repositorio independiente manteniendo su `Package.swift`. Chess Dex usa una dependencia local para que el desarrollo y las pruebas no requieran publicar nada.
 
+## App de prueba independiente
+
+[`Examples/ConnectTestApp`](Examples/ConnectTestApp/README.md) contiene un proyecto Xcode de iPhone que consume el paquete local. Permite buscar y conectar tableros, inspeccionar posiciones y capacidades, encender casillas, reconectar y exportar logs. No depende de Chess Dex ni incorpora lógica de partidas.
+
+Abrir `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, elegir tu equipo de firma y ejecutar en un iPhone físico. La guía del ejemplo incluye el checklist de hardware. El flujo recomendado es: tests del paquete → test app con tablero físico → integración en Chess Dex.
+
 ## Tests
 
 ```sh
