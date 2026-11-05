@@ -40,6 +40,24 @@ To investigate a ChessUp 2:
 6. Enter the firmware and test conditions, then choose **Export BLE report**. Export even if the connection fails: it separates successful discovery from a failed connection or incomplete service inspection.
 7. Disconnect before opening the official app again. You can compare scans before opening the official app and after fully closing it; when an app holds a connection, the board may advertise differently or stop advertising.
 
+### When the board appears only after the official app connects
+
+The first diagnostic version used advertisement scanning only. iOS also provides a separate API to retrieve peripherals that are already connected to the system, including those connected by other apps. The system Bluetooth settings screen is not equivalent to an advertisement scan.
+
+Use this separate test:
+
+1. Open the official ChessUp app and wait until it reports a connection to your board.
+2. Switch to ConnectTestApp without force-closing the official app.
+3. Select **BLE diagnostics → Check connected BLE**. This queries system-connected peripherals exposing Nordic UART (`6e400001-b5a3-f393-e0a9-e50e24dcca9e`), the service used by the inspected Chessconnect integration.
+4. If a candidate appears, select your board and tap **Inspect GATT**. Even a system-connected device needs a local Core Bluetooth connection before service discovery. Other apps may keep their system connection active.
+5. Export the report even if no candidate appears or inspection fails. Include the board firmware, the app that held the connection, and whether it remained connected when switching apps.
+
+This lookup is **not** an enumeration of all paired Bluetooth devices. Nordic UART is shared by other products, so a result is a candidate, not proof that it is a ChessUp. Rows and reports distinguish advertisement results from system-connected results. RSSI and advertisement fields are not fabricated for a system lookup. Both lookup buttons start a fresh discovery report; export each test before starting the other one.
+
+The hypothesis is that the board's advertising or iOS connection state differs while the official app is active. This has not been confirmed on the user's ChessUp firmware. Neither a negative scan nor a negative UART lookup proves a vendor lock.
+
+Reference: [Apple's retrieveConnectedPeripherals(withServices:) documentation](https://developer.apple.com/documentation/corebluetooth/cbcentralmanager/retrieveconnectedperipherals(withservices:)).
+
 This mode does not read characteristic values, write data, enable notifications, start games, or modify board settings. It does perform normal BLE connection and GATT discovery requests. Successfully listing services does not imply support for chess moves. An empty scan alone does not establish that Bluetooth is disabled or restricted to the official app.
 
 The exported report retains the selected advertisement and any collected service snapshot after disconnection, marks incomplete inspections, and records diagnostic events. Nearby devices that were never selected are not logged by name. A new scan starts a fresh report. Identifiers are assigned by iOS, not hardware MAC addresses. The original Chessnut test remains available under **Board test**.

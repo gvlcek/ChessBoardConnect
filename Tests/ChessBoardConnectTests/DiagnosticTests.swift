@@ -13,6 +13,7 @@ final class DiagnosticTests: XCTestCase {
         transport.onEvent?(.device(device(id: id, name: "ChessUp", rssi: -42)))
         XCTAssertEqual(diagnostics.devices.count, 2)
         XCTAssertEqual(diagnostics.devices[0].rssi, -42)
+        XCTAssertEqual(diagnostics.devices[0].source, .advertisement)
         XCTAssertNil(DriverRegistry.standard.makeDriver(for: "ChessUp"))
         try diagnostics.inspect(id)
         XCTAssertEqual(transport.inspectedIDs, [id])
@@ -33,7 +34,9 @@ final class DiagnosticTests: XCTestCase {
         try diagnostics.inspect(id)
         XCTAssertThrowsError(try diagnostics.inspect(id)) { XCTAssertEqual($0 as? BLEDiagnosticError, .busy) }
         diagnostics.scan()
+        diagnostics.checkConnectedDevices()
         XCTAssertEqual(transport.scanCount, 0)
+        XCTAssertEqual(transport.connectedLookupCount, 0)
         XCTAssertEqual(diagnostics.selectedDevice?.id, id)
     }
     @MainActor
@@ -68,6 +71,25 @@ final class DiagnosticTests: XCTestCase {
         XCTAssertEqual(diagnostics.logs.count, 200)
         XCTAssertFalse(diagnostics.state.connectionActive)
     }
+    @MainActor
+    func testSystemConnectedLookupIsSeparateFromAdvertisingAndStillNeedsLocalInspection() throws {
+        let transport = FakeInspectionTransport()
+        let diagnostics = BoardDiagnostics(transport: transport)
+        let oldID = UUID(), connectedID = UUID()
+        transport.onEvent?(.device(device(id: oldID, name: "Previous scan result")))
+        diagnostics.checkConnectedDevices()
+        XCTAssertEqual(transport.connectedLookupCount, 1)
+        XCTAssertEqual(transport.scanCount, 0)
+        XCTAssertTrue(diagnostics.devices.isEmpty)
+        transport.onEvent?(.device(BLEDiagnosticDevice(id: connectedID, name: "ChessUp", localName: nil,
+            advertisedServices: [], rssi: 127, isConnectable: nil, source: .systemConnection)))
+        XCTAssertEqual(diagnostics.devices.first?.source, .systemConnection)
+        XCTAssertTrue(diagnostics.devices[0].advertisedServices.isEmpty, "Lookup results must not invent advertisement data")
+        XCTAssertFalse(diagnostics.inspectionCompleted, "System connectivity alone does not prove a completed GATT inspection")
+        XCTAssertTrue(transport.inspectedIDs.isEmpty)
+        try diagnostics.inspect(connectedID)
+        XCTAssertEqual(transport.inspectedIDs, [connectedID], "A system-connected peripheral still needs a local connection")
+    }
     private func device(id: UUID, name: String, rssi: Int = -60, connectable: Bool? = nil) -> BLEDiagnosticDevice {
         BLEDiagnosticDevice(id: id, name: name, localName: name, advertisedServices: [], rssi: rssi, isConnectable: connectable)
     }
@@ -78,8 +100,10 @@ private final class FakeInspectionTransport: BLEInspectionTransport {
     var onEvent: ((BLEInspectionEvent) -> Void)?
     var inspectedIDs: [UUID] = []
     var scanCount = 0
+    var connectedLookupCount = 0
     func scan() { scanCount += 1; onEvent?(.state(.scanning, "Scanning")) }
     func stopScan() { onEvent?(.state(.scanComplete, "Scan complete")) }
+    func checkConnectedDevices() { connectedLookupCount += 1; onEvent?(.state(.scanComplete, "System lookup complete")) }
     func inspect(_ id: UUID) { inspectedIDs.append(id); onEvent?(.state(.connecting, "Connecting")) }
     func disconnect() { onEvent?(.state(.disconnected, "Disconnected")) }
 }

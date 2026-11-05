@@ -259,25 +259,30 @@ struct BLEDiagnosticLabView: View {
                             Button("Disconnect") { diagnostics.disconnect() }
                         }
                     }.buttonStyle(.bordered)
-                    Text("For ChessUp: fully close the official app on nearby devices, restart the board, leave it on the home screen, and scan. The Wi-Fi icon alone does not tell us whether BLE is advertising.")
+                    Button("Check connected BLE") { diagnostics.checkConnectedDevices() }
+                        .disabled(diagnostics.state.isScanning || diagnostics.state.connectionActive)
+                    Text("For Check connected BLE: open the official ChessUp app and wait for it to connect. Then switch here without force-closing it and check connected BLE. This checks system-connected UART candidates, including connections from other apps.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("For the separate Scan all BLE test: fully close the official app on nearby devices, restart the board, leave it on the home screen, and scan. The Wi-Fi icon alone does not tell us whether BLE is advertising.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Section("Nearby devices · \(diagnostics.devices.count)") {
+                Section("Discovered candidates · \(diagnostics.devices.count)") {
                     TextField("Filter by name (optional)", text: $filter)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                     Text("The filter affects this list only. Clear it to see unnamed devices too.")
                         .font(.caption).foregroundStyle(.secondary)
                     if visibleDevices.isEmpty {
-                        Text("No matching advertisements received. An empty scan does not prove that Bluetooth is disabled.")
+                        Text("No matching devices found. An empty result does not prove that Bluetooth is disabled.")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(visibleDevices) { device in
                         VStack(alignment: .leading, spacing: 5) {
                             Text(device.name).font(.headline)
+                            Text("Source: \(device.source.rawValue)").font(.caption)
                             Text(device.id.uuidString).font(.caption2.monospaced()).textSelection(.enabled)
                             Text("RSSI: \(device.rssi == 127 ? "Unavailable" : "\(device.rssi) dBm") · Connectable: \(connectableText(device.isConnectable))")
                                 .font(.caption)
-                            Text("Advertised services: \(device.advertisedServices.isEmpty ? "None advertised" : device.advertisedServices.joined(separator: ", "))")
+                            Text(device.source == .systemConnection ? "Advertisement data and RSSI were not collected by this lookup." : "Advertised services: \(device.advertisedServices.isEmpty ? "None advertised" : device.advertisedServices.joined(separator: ", "))")
                                 .font(.caption2.monospaced()).textSelection(.enabled)
                             Button("Select for report") {
                                 do { try diagnostics.selectForReport(device.id) }
@@ -294,6 +299,7 @@ struct BLEDiagnosticLabView: View {
                 if let selected = diagnostics.selectedDevice {
                     Section("Selected device snapshot") {
                         LabeledContent("Name", value: selected.name)
+                        LabeledContent("Discovery source", value: selected.source.rawValue)
                         LabeledContent("Local name", value: selected.localName ?? "Not advertised")
                         Text(selected.id.uuidString).font(.caption.monospaced()).textSelection(.enabled)
                         Text("Inspection: \(diagnostics.inspectionCompleted ? "Complete snapshot" : "Incomplete or pending")")
@@ -359,9 +365,11 @@ struct BLEDiagnosticLabView: View {
         Inspection complete: \(diagnostics.inspectionCompleted)
         Devices discovered: \(diagnostics.devices.count)
         Selected name: \(selected?.name ?? "None")
+        Discovery source: \(selected?.source.rawValue ?? "None")
+        System lookup filter (when used): Nordic UART 6e400001-b5a3-f393-e0a9-e50e24dcca9e (not unique to ChessUp)
         Selected identifier: \(selected?.id.uuidString ?? "None")
-        Advertised local name: \(selected?.localName ?? "Not advertised")
-        Advertised services: \(selected?.advertisedServices.joined(separator: ", ") ?? "None")
+        Advertised local name: \(selected?.source == .systemConnection ? "Not collected (system lookup)" : selected?.localName ?? "Not advertised")
+        Advertised services: \(selected?.source == .systemConnection ? "Not collected (system lookup)" : selected?.advertisedServices.joined(separator: ", ") ?? "None")
         Advertised connectable: \(connectableText(selected?.isConnectable))
         Selected RSSI: \(selected.map { $0.rssi == 127 ? "Unavailable" : "\($0.rssi) dBm" } ?? "Not recorded")
         Firmware (entered manually): \(firmware.isEmpty ? "Not provided" : firmware)

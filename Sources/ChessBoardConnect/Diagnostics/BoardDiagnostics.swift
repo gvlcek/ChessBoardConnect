@@ -1,6 +1,11 @@
 import Foundation
 import Combine
 
+public enum BLEDiscoverySource: String, Equatable, Sendable {
+    case advertisement = "BLE advertisement"
+    case systemConnection = "iOS/macOS connected peripheral"
+}
+
 public struct BLEDiagnosticDevice: Identifiable, Equatable, Sendable {
     public let id: UUID
     public let name: String
@@ -8,10 +13,12 @@ public struct BLEDiagnosticDevice: Identifiable, Equatable, Sendable {
     public let advertisedServices: [String]
     public let rssi: Int
     public let isConnectable: Bool?
+    public let source: BLEDiscoverySource
 
-    public init(id: UUID, name: String, localName: String?, advertisedServices: [String], rssi: Int, isConnectable: Bool?) {
+    public init(id: UUID, name: String, localName: String?, advertisedServices: [String], rssi: Int, isConnectable: Bool?, source: BLEDiscoverySource = .advertisement) {
         self.id = id; self.name = name; self.localName = localName
         self.advertisedServices = advertisedServices; self.rssi = rssi; self.isConnectable = isConnectable
+        self.source = source
     }
 }
 
@@ -74,7 +81,14 @@ public final class BoardDiagnostics: ObservableObject {
         transport.scan()
     }
     public func stopScan() { transport.stopScan() }
-    /// Select an advertisement for export without opening a connection.
+    /// Looks up already-connected UART candidates, including connections owned by other apps.
+    /// This is not an advertisement scan or evidence that a candidate is a ChessUp.
+    public func checkConnectedDevices() {
+        guard !state.connectionActive, !state.isScanning else { return }
+        devices = []; selectedDevice = nil; services = []; inspectionCompleted = false; logs = []
+        transport.checkConnectedDevices()
+    }
+    /// Select a discovered device snapshot for export without opening a connection.
     public func selectForReport(_ id: UUID) throws {
         guard !state.connectionActive else { throw BLEDiagnosticError.busy }
         guard let device = devices.first(where: { $0.id == id }) else { throw BLEDiagnosticError.unknownDevice }
@@ -114,6 +128,7 @@ protocol BLEInspectionTransport: AnyObject {
     var onEvent: ((BLEInspectionEvent) -> Void)? { get set }
     func scan()
     func stopScan()
+    func checkConnectedDevices()
     func inspect(_ id: UUID)
     func disconnect()
 }

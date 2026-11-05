@@ -10,6 +10,9 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
     private var active: CBPeripheral?
     private var cancelling: Set<UUID> = []
     private var scanRequested = false
+    private var connectedLookupRequested = false
+    // Nordic UART is used by ChessUp but is not unique to it. This only finds candidates.
+    private static let connectedServiceFilter = CBUUID(string: "6e400001-b5a3-f393-e0a9-e50e24dcca9e")
     private var watchdog: Task<Void, Never>?
     private var pendingServices: Set<ObjectIdentifier> = []
 
@@ -20,6 +23,32 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
             emit(.waitingForBluetooth, "Waiting for Bluetooth permission and availability…")
             central = CBCentralManager(delegate: self, queue: .main)
         } else { startScan() }
+    }
+    func checkConnectedDevices() {
+        guard active == nil else { return }
+        connectedLookupRequested = true; peripherals = [:]
+        if central == nil {
+            emit(.waitingForBluetooth, "Waiting for Bluetooth to check system-connected UART devices…")
+            central = CBCentralManager(delegate: self, queue: .main)
+        } else { lookupConnectedDevices() }
+    }
+    private func lookupConnectedDevices() {
+        guard connectedLookupRequested, let central else { return }
+        guard central.state == .poweredOn else {
+            if central.state != .unknown { bluetoothUnavailable(central.state) }
+            return
+        }
+        connectedLookupRequested = false
+        // Apple's API includes peripherals connected by other apps; a local connect
+        // is still required before service inspection. No advertisements are inferred.
+        let candidates = central.retrieveConnectedPeripherals(withServices: [Self.connectedServiceFilter])
+        for peripheral in candidates {
+            peripherals[peripheral.identifier] = peripheral
+            onEvent?(.device(BLEDiagnosticDevice(id: peripheral.identifier,
+                name: peripheral.name ?? "Unnamed connected device", localName: nil,
+                advertisedServices: [], rssi: 127, isConnectable: nil, source: .systemConnection)))
+        }
+        emit(.scanComplete, "System-connected UART check: \(candidates.count) candidate(s). Not a scan of all Bluetooth devices; UART is not unique to ChessUp.")
     }
     private func startScan() {
         guard scanRequested, let central else { return }
@@ -39,8 +68,8 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
         }
     }
     func stopScan() {
-        guard scanRequested else { return }
-        central?.stopScan(); scanRequested = false; watchdog?.cancel()
+        guard scanRequested || connectedLookupRequested else { return }
+        central?.stopScan(); scanRequested = false; connectedLookupRequested = false; watchdog?.cancel()
         emit(.scanComplete, "Scan stopped. Select a device to inspect its GATT metadata.")
     }
     func inspect(_ id: UUID) {
@@ -57,7 +86,7 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
         armTimeout("Connection timed out. Close the official app, restart the board, and scan again.")
     }
     func disconnect() {
-        central?.stopScan(); scanRequested = false
+        central?.stopScan(); scanRequested = false; connectedLookupRequested = false
         release(cancel: true)
         emit(.disconnected, "Disconnected. Collected metadata is retained for export.")
     }
@@ -73,7 +102,7 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
         active = nil
     }
     private func fail(_ message: String) {
-        central?.stopScan(); scanRequested = false
+        central?.stopScan(); scanRequested = false; connectedLookupRequested = false
         release(cancel: true)
         emit(.failed(message), message)
     }
@@ -87,7 +116,7 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
         }
     }
     private func bluetoothUnavailable(_ state: CBManagerState) {
-        central?.stopScan(); scanRequested = false; release(cancel: false); cancelling = []
+        central?.stopScan(); scanRequested = false; connectedLookupRequested = false; release(cancel: false); cancelling = []
         let message: String
         switch state {
         case .unauthorized: message = "Allow Bluetooth in Settings → Privacy & Security → Bluetooth."
@@ -126,7 +155,10 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
 // This central manager and all peripheral callbacks use the main queue.
 extension CoreBluetoothInspectionTransport: @preconcurrency CBCentralManagerDelegate, @preconcurrency CBPeripheralDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        if central.state == .poweredOn { startScan() }
+        if central.state == .poweredOn {
+            if connectedLookupRequested { lookupConnectedDevices() }
+            else { startScan() }
+        }
         else if central.state != .unknown { bluetoothUnavailable(central.state) }
     }
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {

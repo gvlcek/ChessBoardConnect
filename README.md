@@ -93,6 +93,8 @@ Open `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, select your signing tea
 
 `BoardDiagnostics` provides an optional metadata-only inspection API, used by the test app's **BLE diagnostics** mode. It scans without manufacturer/driver filters and can inspect a selected device's GATT services and characteristic properties. This allows investigation of ChessUp discovery before a ChessUp driver exists.
 
+`checkConnectedDevices()` separately queries system-connected Nordic UART peripherals, including devices connected by other apps. This is useful when advertisement scanning does not find a board that the official app can connect to. It does not enumerate all paired Bluetooth devices, and UART is not unique to ChessUp. `BLEDiagnosticDevice.source` distinguishes these candidates from advertisements; missing advertisement metadata and RSSI are not invented. GATT inspection still requires a local connection.
+
 It does not expose characteristic value reads, writes, notification subscriptions, or game commands. The public snapshots contain plain Swift values, not Core Bluetooth objects. Disconnected snapshots are retained for export; the connection state remains separate from inspection completion. `selectForReport` can capture an advertisement without connecting, including advertisements marked non-connectable.
 
 See the [test app guide](Examples/ConnectTestApp/README.md#ble-diagnostics-for-chessup-discovery) for the physical test procedure. Tests use an injected metadata transport; real radio/GATT behavior must still be verified with your board. The driver registry and normal board connection API are unchanged.
