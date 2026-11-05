@@ -139,7 +139,11 @@ struct ConnectionLabView: View {
                     ShareLink(item: diagnosticReport) {
                         Label("Export log", systemImage: "square.and.arrow.up")
                     }
+                    Button("Clear logs", systemImage: "trash") { connect.clearLogs() }
+                        .disabled(connect.logs.isEmpty)
                     Text("Exports the last 200 events, including TX/RX messages, and the device information shown in the report.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Clearing logs keeps the connection and readings. New events are recorded as they arrive.")
                         .font(.caption).foregroundStyle(.secondary)
                     ForEach(Array(connect.logs.suffix(20).enumerated()), id: \.offset) { _, line in
                         Text(line).font(.caption2.monospaced()).textSelection(.enabled)
@@ -313,7 +317,11 @@ struct BLEDiagnosticLabView: View {
                     TextField("Board firmware (optional)", text: $firmware)
                     TextField("Test conditions: board screen, official app closed, etc.", text: $notes, axis: .vertical)
                     ShareLink(item: report) { Label("Export BLE report", systemImage: "square.and.arrow.up") }
+                    Button("Clear logs", systemImage: "trash") { diagnostics.clearLogs() }
+                        .disabled(diagnostics.logs.isEmpty)
                     Text("Includes the selected device's name, identifier, advertised services, discovered GATT metadata, and the last 200 diagnostic events. Other nearby device names are not included.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Clearing logs keeps the connection and inspection snapshot. New events are recorded as they arrive.")
                         .font(.caption).foregroundStyle(.secondary)
                     ForEach(Array(diagnostics.logs.suffix(12).enumerated()), id: \.offset) { _, line in
                         Text(line).font(.caption2.monospaced()).textSelection(.enabled)

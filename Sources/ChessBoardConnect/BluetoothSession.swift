@@ -39,6 +39,7 @@ final class BluetoothSession: NSObject, ObservableObject {
         logs.append("\(Date().formatted(.iso8601))  \(text)")
         if logs.count > 200 { logs.removeFirst(logs.count - 200) }
     }
+    func clearLogs() { logs.removeAll(keepingCapacity: true) }
     func scan() {
         guard active == nil else { return }
         scanRequested = true

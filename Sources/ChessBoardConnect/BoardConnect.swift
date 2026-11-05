@@ -35,6 +35,8 @@ public final class BoardConnect: BoardConnecting {
     public func stopScan() { session.stopScan() }
     public func connect(_ id: UUID) throws { try session.connect(id) }
     public func disconnect() { session.disconnect() }
+    /// Clears recorded events without changing the connection or current readings.
+    public func clearLogs() { session.clearLogs() }
     public func reconnect() throws { try session.reconnect() }
     public func refresh() throws { try session.refresh() }
     public func showLights(_ squares: [Int]) throws { try session.showLights(squares) }

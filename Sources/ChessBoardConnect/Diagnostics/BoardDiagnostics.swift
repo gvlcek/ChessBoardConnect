@@ -88,6 +88,8 @@ public final class BoardDiagnostics: ObservableObject {
     }
     /// Collected metadata remains available for export after disconnection.
     public func disconnect() { transport.disconnect() }
+    /// Clears events only; selected devices and collected metadata remain available.
+    public func clearLogs() { logs.removeAll(keepingCapacity: true) }
 
     private func receive(_ event: BLEInspectionEvent) {
         switch event {

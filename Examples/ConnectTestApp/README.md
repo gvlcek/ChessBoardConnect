@@ -24,6 +24,8 @@ The project references the package at `../..`, so it works both from an independ
 
 An accepted command is **queued**. The app's confirmation does not prove that the firmware executed it or that the pieces were moved. Check the board and its readings.
 
+Both modes provide a **Clear logs** button beside the export controls. It clears the recorded events without disconnecting, resetting reading counters, or removing position/GATT snapshots. New events continue to appear while a session is active; exported reports still include their current summary and snapshot.
+
 ## BLE diagnostics for ChessUp discovery
 
 The mode selector at the top switches between **Board test** (registered drivers, such as the Go) and **BLE diagnostics** (driver-independent discovery). Switching modes stops and disconnects the previous session. All Bluetooth code remains in the package.

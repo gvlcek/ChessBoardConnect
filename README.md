@@ -57,6 +57,7 @@ SwiftUI apps can observe `BoardConnect` with `@StateObject` and its published pr
 - `showLights` / `refresh`: shortcuts for the corresponding commands.
 - `disconnect`, `reconnect`, `stopScan`: explicit connection lifecycle. Disconnecting discards the current position and pending commands. Reconnecting requires a new reading.
 - `logs`: up to 200 diagnostic events, without persistent storage. Timestamps use ISO 8601.
+- `clearLogs()`: clears recorded events without disconnecting or changing readings. `BoardDiagnostics` offers the same method and retains its selected device and GATT snapshot. New events continue to be recorded.
 
 Public square indices run from a8=0 to h8=7, then down to a1=56 through h1=63. Use `BoardPosition.index("e4")` to avoid depending on this numbering. Passing `[]` to the lights command turns all lights off. Updates are published on MainActor. Errors are reported through `ConnectError` or `state.failed`; an invalid incoming reading invalidates the current position.
 
