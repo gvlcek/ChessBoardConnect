@@ -83,7 +83,7 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
         active = peripheral; peripheral.delegate = self
         emit(.connecting, "Connecting for GATT inspection only…")
         central?.connect(peripheral)
-        armTimeout("Connection timed out. Close the official app, restart the board, and scan again.")
+        armTimeout("Connection timed out. Check that the board is on and try discovery again.")
     }
     func disconnect() {
         central?.stopScan(); scanRequested = false; connectedLookupRequested = false

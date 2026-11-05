@@ -68,10 +68,16 @@ public final class BoardDiagnostics: ObservableObject {
     @Published public private(set) var inspectionCompleted = false
     @Published public private(set) var logs: [String] = []
     private let transport: any BLEInspectionTransport
+    private let namePrefix: String?
 
-    public convenience init() { self.init(transport: CoreBluetoothInspectionTransport()) }
-    init(transport: any BLEInspectionTransport) {
+    /// Optionally limits discovery results to a case-insensitive peripheral/local name prefix.
+    /// Omit the prefix to include all candidates, including unnamed peripherals.
+    public convenience init(namePrefix: String? = nil) {
+        self.init(transport: CoreBluetoothInspectionTransport(), namePrefix: namePrefix)
+    }
+    init(transport: any BLEInspectionTransport, namePrefix: String? = nil) {
         self.transport = transport
+        self.namePrefix = namePrefix?.lowercased()
         transport.onEvent = { [weak self] event in self?.receive(event) }
     }
 
@@ -108,6 +114,10 @@ public final class BoardDiagnostics: ObservableObject {
     private func receive(_ event: BLEInspectionEvent) {
         switch event {
         case .device(let device):
+            if let namePrefix {
+                guard device.name.lowercased().hasPrefix(namePrefix)
+                    || device.localName?.lowercased().hasPrefix(namePrefix) == true else { return }
+            }
             if let index = devices.firstIndex(where: { $0.id == device.id }) { devices[index] = device }
             else { devices.append(device) }
         case .state(let next, let description):

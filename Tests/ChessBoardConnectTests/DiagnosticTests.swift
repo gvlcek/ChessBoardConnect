@@ -90,6 +90,39 @@ final class DiagnosticTests: XCTestCase {
         try diagnostics.inspect(connectedID)
         XCTAssertEqual(transport.inspectedIDs, [connectedID], "A system-connected peripheral still needs a local connection")
     }
+    @MainActor
+    func testNamePrefixFiltersBothSourcesWithoutPinningAPeripheralIdentifier() throws {
+        let transport = FakeInspectionTransport()
+        let diagnostics = BoardDiagnostics(transport: transport, namePrefix: "ChessUp")
+        diagnostics.checkConnectedDevices()
+        let connectedID = UUID()
+        let unrelatedID = UUID()
+        for (id, name) in [(connectedID, "ChessUp"), (unrelatedID, "Other UART device")] {
+            transport.onEvent?(.device(BLEDiagnosticDevice(id: id, name: name, localName: nil,
+                advertisedServices: [], rssi: 127, isConnectable: nil, source: .systemConnection)))
+        }
+        XCTAssertEqual(diagnostics.devices.map(\.id), [connectedID])
+        XCTAssertTrue(transport.inspectedIDs.isEmpty, "Finding a matching name must not connect automatically")
+        XCTAssertThrowsError(try diagnostics.inspect(unrelatedID)) { XCTAssertEqual($0 as? BLEDiagnosticError, .unknownDevice) }
+        try diagnostics.inspect(connectedID)
+        XCTAssertEqual(transport.inspectedIDs, [connectedID])
+        diagnostics.disconnect()
+
+        diagnostics.scan()
+        let advertisedID = UUID()
+        let localNameID = UUID()
+        transport.onEvent?(.device(device(id: advertisedID, name: "chessup 2")))
+        transport.onEvent?(.device(device(id: advertisedID, name: "chessup 2", rssi: -42)))
+        transport.onEvent?(.device(BLEDiagnosticDevice(id: localNameID, name: "Unnamed device", localName: "CHESSUP",
+            advertisedServices: [], rssi: -60, isConnectable: true)))
+        transport.onEvent?(.device(device(id: UUID(), name: "Unnamed device")))
+        transport.onEvent?(.device(device(id: UUID(), name: "Not ChessUp")))
+        XCTAssertEqual(diagnostics.devices.map(\.id), [advertisedID, localNameID])
+        XCTAssertEqual(diagnostics.devices[0].rssi, -42)
+        diagnostics.stopScan()
+        try diagnostics.inspect(advertisedID)
+        XCTAssertEqual(transport.inspectedIDs, [connectedID, advertisedID], "New discoveries use their current iOS identifiers")
+    }
     private func device(id: UUID, name: String, rssi: Int = -60, connectable: Bool? = nil) -> BLEDiagnosticDevice {
         BLEDiagnosticDevice(id: id, name: name, localName: name, advertisedServices: [], rssi: rssi, isConnectable: connectable)
     }

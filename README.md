@@ -1,6 +1,6 @@
 # ChessBoardConnect
 
-An independent Swift package for connecting electronic chessboards. Requires Swift 6, iOS 17+ or macOS 14+. No external dependencies: Foundation, Combine, and Core Bluetooth are Apple frameworks. Tests can run on macOS without an iPhone; communication with a physical Go is still awaiting validation.
+An independent Swift package for connecting electronic chessboards. Requires Swift 6, iOS 17+ or macOS 14+. No external dependencies: Foundation, Combine, and Core Bluetooth are Apple frameworks. Tests can run on macOS without an iPhone; full position and light validation still requires the physical board.
 
 All project documentation, app text, diagnostic messages, and examples are written in English.
 
@@ -65,8 +65,8 @@ Public square indices run from a8=0 to h8=7, then down to a1=56 through h1=63. U
 
 | Driver | Status | Current capabilities |
 | --- | --- | --- |
-| Classic Chessnut | Extracted from the Go probe; hardware validation pending | Read positions, control lights |
-| ChessUp / ChessUp 2 | Not implemented or registered yet | None advertised |
+| Classic Chessnut | Connection and incoming frames observed on Go; full hardware checklist pending | Read positions, control lights |
+| ChessUp / ChessUp 2 | Local connection and GATT inspection observed on ChessUp 2; game driver not implemented or registered | None advertised |
 
 The classic registry recognizes Chessnut names and explicitly excludes Move and Evo, which must not receive this protocol based only on the brand name. Go is the target for physical testing; compatibility with every classic firmware version is not guaranteed.
 
@@ -91,13 +91,13 @@ Open `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, select your signing tea
 
 ## Driver-independent BLE diagnostics
 
-`BoardDiagnostics` provides an optional metadata-only inspection API, used by the test app's **BLE diagnostics** mode. It scans without manufacturer/driver filters and can inspect a selected device's GATT services and characteristic properties. This allows investigation of ChessUp discovery before a ChessUp driver exists.
+`BoardDiagnostics` provides an optional metadata-only inspection API. It can inspect a selected device's GATT services and characteristic properties before a game driver exists. By default it includes all candidates, including unnamed devices; `BoardDiagnostics(namePrefix: "ChessUp")` limits results from both discovery paths to a case-insensitive peripheral/local name prefix. The filter uses current discovery identifiers rather than pinning a particular board UUID.
 
 `checkConnectedDevices()` separately queries system-connected Nordic UART peripherals, including devices connected by other apps. This is useful when advertisement scanning does not find a board that the official app can connect to. It does not enumerate all paired Bluetooth devices, and UART is not unique to ChessUp. `BLEDiagnosticDevice.source` distinguishes these candidates from advertisements; missing advertisement metadata and RSSI are not invented. GATT inspection still requires a local connection.
 
 It does not expose characteristic value reads, writes, notification subscriptions, or game commands. The public snapshots contain plain Swift values, not Core Bluetooth objects. Disconnected snapshots are retained for export; the connection state remains separate from inspection completion. `selectForReport` can capture an advertisement without connecting, including advertisements marked non-connectable.
 
-See the [test app guide](Examples/ConnectTestApp/README.md#ble-diagnostics-for-chessup-discovery) for the physical test procedure. Tests use an injected metadata transport; real radio/GATT behavior must still be verified with your board. The driver registry and normal board connection API are unchanged.
+The test app's **ChessUp** screen uses the filtered system lookup as its main flow. The manual filter and generic BLE list are no longer exposed there; technical details and a filtered advertisement fallback remain expandable. Generic inspection APIs are retained for investigating future boards. See the [test app guide](Examples/ConnectTestApp/README.md#chessup-connection) for the physical test procedure and observed hardware results. Tests use an injected metadata transport; real radio/GATT behavior must still be verified with your board. The driver registry and normal board connection API are unchanged.
 
 ## Tests
 

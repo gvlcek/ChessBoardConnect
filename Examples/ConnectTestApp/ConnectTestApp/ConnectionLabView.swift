@@ -233,10 +233,9 @@ private enum LabError: LocalizedError {
     var errorDescription: String? { "Enter squares from a1 to h8, separated by spaces or commas. For example: e2 e4." }
 }
 
-/// Metadata inspection without any game driver, characteristic reads or commands.
-struct BLEDiagnosticLabView: View {
-    @StateObject private var diagnostics = BoardDiagnostics()
-    @State private var filter = ""
+/// Focused ChessUp discovery; all Bluetooth operations remain in the package.
+struct ChessUpConnectionLabView: View {
+    @StateObject private var diagnostics = BoardDiagnostics(namePrefix: "ChessUp")
     @State private var firmware = ""
     @State private var notes = ""
     @State private var errorMessage: String?
@@ -244,13 +243,13 @@ struct BLEDiagnosticLabView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Driver-independent discovery") {
-                    Text("Use this mode to find ChessUp or other BLE devices before a board driver exists.")
-                    Text("Scans all nearby BLE advertisements. Inspect only your board. This mode discovers service metadata; it does not read values, subscribe to notifications, or send board commands.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Label(diagnostics.status, systemImage: diagnostics.inspectionCompleted ? "checkmark.circle" : "antenna.radiowaves.left.and.right")
+                Section("Connection") {
+                    Label(connectionStatus, systemImage: diagnostics.state == .inspected ? "checkmark.circle" : "antenna.radiowaves.left.and.right")
+                    if diagnostics.state.connectionActive, let selected = diagnostics.selectedDevice {
+                        LabeledContent("Board", value: selected.name)
+                    }
                     HStack {
-                        Button("Scan all BLE") { diagnostics.scan() }
+                        Button("Find ChessUp") { diagnostics.checkConnectedDevices() }
                             .disabled(diagnostics.state.isScanning || diagnostics.state.connectionActive)
                         if diagnostics.state.isScanning {
                             Button("Stop") { diagnostics.stopScan() }
@@ -259,91 +258,107 @@ struct BLEDiagnosticLabView: View {
                             Button("Disconnect") { diagnostics.disconnect() }
                         }
                     }.buttonStyle(.bordered)
-                    Button("Check connected BLE") { diagnostics.checkConnectedDevices() }
-                        .disabled(diagnostics.state.isScanning || diagnostics.state.connectionActive)
-                    Text("For Check connected BLE: open the official ChessUp app and wait for it to connect. Then switch here without force-closing it and check connected BLE. This checks system-connected UART candidates, including connections from other apps.")
+                    Text("Open the official ChessUp app and wait for it to connect. Return here without force-closing it, then tap Find ChessUp and select your board.")
                         .font(.caption).foregroundStyle(.secondary)
-                    Text("For the separate Scan all BLE test: fully close the official app on nearby devices, restart the board, leave it on the home screen, and scan. The Wi-Fi icon alone does not tell us whether BLE is advertising.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Section("Discovered candidates · \(diagnostics.devices.count)") {
-                    TextField("Filter by name (optional)", text: $filter)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    Text("The filter affects this list only. Clear it to see unnamed devices too.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    if visibleDevices.isEmpty {
-                        Text("No matching devices found. An empty result does not prove that Bluetooth is disabled.")
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(visibleDevices) { device in
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(device.name).font(.headline)
-                            Text("Source: \(device.source.rawValue)").font(.caption)
-                            Text(device.id.uuidString).font(.caption2.monospaced()).textSelection(.enabled)
-                            Text("RSSI: \(device.rssi == 127 ? "Unavailable" : "\(device.rssi) dBm") · Connectable: \(connectableText(device.isConnectable))")
-                                .font(.caption)
-                            Text(device.source == .systemConnection ? "Advertisement data and RSSI were not collected by this lookup." : "Advertised services: \(device.advertisedServices.isEmpty ? "None advertised" : device.advertisedServices.joined(separator: ", "))")
-                                .font(.caption2.monospaced()).textSelection(.enabled)
-                            Button("Select for report") {
-                                do { try diagnostics.selectForReport(device.id) }
-                                catch { errorMessage = error.localizedDescription }
-                            }.disabled(diagnostics.state.connectionActive)
-                            Button("Inspect GATT") {
-                                do { try diagnostics.inspect(device.id) }
-                                catch { errorMessage = error.localizedDescription }
-                            }
-                            .disabled(diagnostics.state.connectionActive || device.isConnectable == false)
-                        }.padding(.vertical, 4)
-                    }
-                }
-                if let selected = diagnostics.selectedDevice {
-                    Section("Selected device snapshot") {
-                        LabeledContent("Name", value: selected.name)
-                        LabeledContent("Discovery source", value: selected.source.rawValue)
-                        LabeledContent("Local name", value: selected.localName ?? "Not advertised")
-                        Text(selected.id.uuidString).font(.caption.monospaced()).textSelection(.enabled)
-                        Text("Inspection: \(diagnostics.inspectionCompleted ? "Complete snapshot" : "Incomplete or pending")")
-                        Text("\(diagnostics.services.count) services discovered. GATT access alone does not establish chess compatibility.")
+                    if diagnostics.state == .inspected {
+                        Text("Bluetooth connection verified. Sending moves and receiving board events still require a ChessUp driver.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                ForEach(Array(diagnostics.services.enumerated()), id: \.offset) { _, service in
-                    Section("Service \(service.uuid)") {
-                        Text(service.isPrimary ? "Primary service" : "Secondary service").font(.caption)
-                        ForEach(Array(service.characteristics.enumerated()), id: \.offset) { _, characteristic in
+                if !diagnostics.state.connectionActive {
+                    Section("Boards found · \(diagnostics.devices.count)") {
+                        if diagnostics.devices.isEmpty {
+                            Text(diagnostics.state.isScanning ? "Looking for ChessUp…" : "No ChessUp found yet.")
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(diagnostics.devices) { device in
+                            Button {
+                                do { try diagnostics.inspect(device.id) }
+                                catch { errorMessage = error.localizedDescription }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Connect to \(device.name)").font(.headline)
+                                    Text(device.source == .systemConnection ? "Available through iOS" : "Nearby board")
+                                        .font(.caption)
+                                    if device.isConnectable == false {
+                                        Text("Board is not accepting connections").font(.caption)
+                                    }
+                                    if diagnostics.devices.count > 1 {
+                                        Text(device.id.uuidString).font(.caption2.monospaced())
+                                    }
+                                }
+                            }
+                            .disabled(diagnostics.state.isScanning || device.isConnectable == false)
+                        }
+                    }
+                }
+                Section {
+                    DisclosureGroup("More connection options") {
+                        Button("Scan nearby ChessUp") { diagnostics.scan() }
+                            .disabled(diagnostics.state.isScanning || diagnostics.state.connectionActive)
+                        Text("Fallback for boards advertising directly. Scans for 15 seconds and shows only names starting with ChessUp. Each search starts a fresh report.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Section {
+                    DisclosureGroup("Technical details") {
+                        Text(diagnostics.status).font(.caption).foregroundStyle(.secondary)
+                        if let selected = diagnostics.selectedDevice {
+                            LabeledContent("Name", value: selected.name)
+                            LabeledContent("Source", value: selected.source.rawValue)
+                            Text(selected.id.uuidString).font(.caption.monospaced()).textSelection(.enabled)
+                            Text("RSSI: \(selected.rssi == 127 ? "Unavailable" : "\(selected.rssi) dBm") · Connectable: \(connectableText(selected.isConnectable))")
+                                .font(.caption)
+                            Text("Inspection snapshot: \(diagnostics.inspectionCompleted ? "Complete" : "Incomplete or pending")")
+                                .font(.caption)
+                        }
+                        ForEach(Array(diagnostics.services.enumerated()), id: \.offset) { _, service in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(characteristic.uuid).font(.caption.monospaced()).textSelection(.enabled)
-                                Text(characteristic.properties.isEmpty ? "No properties reported" : characteristic.properties.joined(separator: ", "))
-                                    .font(.caption).foregroundStyle(.secondary)
+                                Text("Service \(service.uuid)").font(.caption.monospaced()).textSelection(.enabled)
+                                ForEach(Array(service.characteristics.enumerated()), id: \.offset) { _, characteristic in
+                                    Text("\(characteristic.uuid) [\(characteristic.properties.joined(separator: ", "))]")
+                                        .font(.caption2.monospaced()).textSelection(.enabled)
+                                }
                             }
                         }
                     }
                 }
-                Section("Export inspection report") {
-                    TextField("Board firmware (optional)", text: $firmware)
-                    TextField("Test conditions: board screen, official app closed, etc.", text: $notes, axis: .vertical)
-                    ShareLink(item: report) { Label("Export BLE report", systemImage: "square.and.arrow.up") }
+                Section("Logs") {
+                    ShareLink(item: report) { Label("Export report", systemImage: "square.and.arrow.up") }
                     Button("Clear logs", systemImage: "trash") { diagnostics.clearLogs() }
                         .disabled(diagnostics.logs.isEmpty)
-                    Text("Includes the selected device's name, identifier, advertised services, discovered GATT metadata, and the last 200 diagnostic events. Other nearby device names are not included.")
+                    Text("Clearing logs keeps the connection and inspection snapshot.")
                         .font(.caption).foregroundStyle(.secondary)
-                    Text("Clearing logs keeps the connection and inspection snapshot. New events are recorded as they arrive.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    ForEach(Array(diagnostics.logs.suffix(12).enumerated()), id: \.offset) { _, line in
-                        Text(line).font(.caption2.monospaced()).textSelection(.enabled)
+                    DisclosureGroup("Test notes") {
+                        TextField("Board firmware (optional)", text: $firmware)
+                        TextField("Test conditions (optional)", text: $notes, axis: .vertical)
+                    }
+                    DisclosureGroup("Recent events") {
+                        ForEach(Array(diagnostics.logs.suffix(12).enumerated()), id: \.offset) { _, line in
+                            Text(line).font(.caption2.monospaced()).textSelection(.enabled)
+                        }
                     }
                 }
             }
-            .navigationTitle("BLE Diagnostics")
+            .navigationTitle("ChessUp Connection")
             .onDisappear { diagnostics.disconnect() }
-            .alert("Inspection failed", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            .alert("Connection failed", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button("Close", role: .cancel) { errorMessage = nil }
             } message: { Text(errorMessage ?? "") }
         }
     }
-    private var visibleDevices: [BLEDiagnosticDevice] {
-        let query = filter.trimmingCharacters(in: .whitespacesAndNewlines)
-        return diagnostics.devices.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
+    private var connectionStatus: String {
+        switch diagnostics.state {
+        case .idle: "Ready to find ChessUp"
+        case .waitingForBluetooth: "Waiting for Bluetooth…"
+        case .scanning: "Looking for nearby ChessUp…"
+        case .scanComplete: diagnostics.devices.isEmpty ? "No ChessUp found. Check the official app's connection and try again." : "Select your ChessUp below"
+        case .connecting: "Connecting to ChessUp…"
+        case .discoveringServices: "Checking Bluetooth services…"
+        case .inspected: "Connected · Bluetooth services inspected"
+        case .disconnected: "Disconnected"
+        case .failed(let message): message
+        }
     }
     private func connectableText(_ value: Bool?) -> String {
         value.map { $0 ? "Yes" : "No" } ?? "Unknown"
@@ -358,12 +373,13 @@ struct BLEDiagnosticLabView: View {
         }.joined(separator: "\n\n")
         return """
         ChessBoardConnect · ConnectTestApp \(version) (\(build))
-        Mode: BLE metadata-only diagnostics (no characteristic values or board commands)
+        Mode: ChessUp connection (metadata only; no characteristic values or board commands)
+        Name filter: ChessUp prefix (case-insensitive; no fixed peripheral identifier)
         Date: \(Date().formatted(.iso8601))
         Device: \(UIDevice.current.model), \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)
         Status: \(diagnostics.status)
         Inspection complete: \(diagnostics.inspectionCompleted)
-        Devices discovered: \(diagnostics.devices.count)
+        Matching devices discovered: \(diagnostics.devices.count)
         Selected name: \(selected?.name ?? "None")
         Discovery source: \(selected?.source.rawValue ?? "None")
         System lookup filter (when used): Nordic UART 6e400001-b5a3-f393-e0a9-e50e24dcca9e (not unique to ChessUp)
