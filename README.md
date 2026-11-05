@@ -1,19 +1,21 @@
 # ChessBoardConnect
 
-Paquete Swift independiente para conectar tableros electrónicos. Swift 6, iOS 17+ y macOS 14+. Sin dependencias externas; Foundation, Combine y Core Bluetooth son frameworks de Apple. macOS permite ejecutar los tests sin un iPhone; la radio del Go sigue pendiente de validación física.
+An independent Swift package for connecting electronic chessboards. Requires Swift 6, iOS 17+ or macOS 14+. No external dependencies: Foundation, Combine, and Core Bluetooth are Apple frameworks. Tests can run on macOS without an iPhone; communication with a physical Go is still awaiting validation.
 
-## Uso desde otra app
+All project documentation, app text, diagnostic messages, and examples are written in English.
 
-En Xcode: Add Package Dependencies → Add Local → elegir esta carpeta y enlazar el producto `ChessBoardConnect` al target. En un paquete Swift consumidor:
+## Use in another app
+
+In Xcode, choose Add Package Dependencies → Add Local, select this folder, and link the `ChessBoardConnect` product to your target. In a consuming Swift package:
 
 ```swift
-// Package.swift (rutas relativas al paquete consumidor)
+// Package.swift: paths are relative to the consuming package.
 .package(path: "../ChessBoardConnect")
-// En dependencies del target:
+// In the target's dependencies:
 .product(name: "ChessBoardConnect", package: "ChessBoardConnect")
 ```
 
-La aplicación host debe declarar `NSBluetoothAlwaysUsageDescription` en su Info.plist. En macOS con App Sandbox también debe habilitar el permiso Bluetooth. El paquete no incluye pantallas ni solicita permisos hasta iniciar la búsqueda.
+The host app must declare `NSBluetoothAlwaysUsageDescription` in its Info.plist. A sandboxed macOS app must also enable the Bluetooth entitlement. The package includes no UI and does not request permission until a scan starts.
 
 ```swift
 import ChessBoardConnect
@@ -26,8 +28,8 @@ final class MyBoardModel {
 
     init() {
         connect.$position.sink { position in
-            // nil significa que no hay una lectura vigente.
-            print(position?.fen ?? "Sin posición")
+            // nil means that no current reading is available.
+            print(position?.fen ?? "No position")
         }.store(in: &subscriptions)
 
         connect.$state.sink { print($0) }.store(in: &subscriptions)
@@ -42,49 +44,49 @@ final class MyBoardModel {
 }
 ```
 
-Con SwiftUI se puede observar `BoardConnect` usando `@StateObject` y sus propiedades publicadas. Cada suscriptor recibe sus propios cambios: no hay un callback de posición único que una pantalla pueda reemplazar accidentalmente.
+SwiftUI apps can observe `BoardConnect` with `@StateObject` and its published properties. Each subscriber receives updates independently; there is no single position callback that another screen could accidentally replace.
 
-## Contrato
+## Contract
 
-- `devices`: dispositivos compatibles descubiertos; identidad, nombre, señal y capacidades.
-- `state`: estados tipados para búsqueda, conexión, recepción, desconexión y fallo. `status` ofrece un texto de diagnóstico.
-- `position`: colocación de las 64 piezas, normalizada como primer campo FEN; no inventa turno, derechos de enroque ni legalidad.
-- `lastMove`: última jugada reportada por un driver que emita jugadas; el driver Chessnut actual entrega posiciones y no infiere movimientos.
-- `capabilities`: permite comprobar si el tablero soporta lectura, luces, envío de jugadas o carga de posiciones.
-- `send`: comandos comunes; falla con `unsupportedCapability` si el driver conectado no ofrece esa operación. Retornar sin error confirma que el comando fue encolado, no que una persona haya movido las piezas.
-- `showLights` / `refresh`: atajos de los comandos correspondientes.
-- `disconnect`, `reconnect`, `stopScan`: ciclo de conexión explícito. Tras desconectar, se descartan posiciones y comandos pendientes. Reconectar exige recibir una lectura nueva.
-- `logs`: registro de diagnóstico acotado a 200 eventos, sin almacenamiento persistente.
+- `devices`: discovered compatible devices, including identity, name, signal strength, and capabilities.
+- `state`: typed states for scanning, connecting, receiving, disconnecting, and failure. `status` provides a diagnostic description.
+- `position`: the placement of all 64 squares, normalized as the first FEN field. It does not infer the turn, castling rights, or legality.
+- `lastMove`: the last move reported by a driver that emits moves. The current Chessnut driver delivers positions and does not infer moves.
+- `capabilities`: whether the connected board supports reading positions, controlling lights, sending moves, or loading positions.
+- `send`: common commands. Throws `unsupportedCapability` when the connected driver does not provide the requested operation. A successful return means the command was queued, not that a person moved the pieces.
+- `showLights` / `refresh`: shortcuts for the corresponding commands.
+- `disconnect`, `reconnect`, `stopScan`: explicit connection lifecycle. Disconnecting discards the current position and pending commands. Reconnecting requires a new reading.
+- `logs`: up to 200 diagnostic events, without persistent storage. Timestamps use ISO 8601.
 
-Las coordenadas públicas son índices a8=0...h8=7, a1=56...h1=63. `BoardPosition.index("e4")` evita depender de esa numeración. Luces con `[]` significa apagar todas. Los datos se publican en MainActor. Los errores se informan con `ConnectError` o con `state.failed`; una recepción inválida invalida la posición vigente.
+Public square indices run from a8=0 to h8=7, then down to a1=56 through h1=63. Use `BoardPosition.index("e4")` to avoid depending on this numbering. Passing `[]` to the lights command turns all lights off. Updates are published on MainActor. Errors are reported through `ConnectError` or `state.failed`; an invalid incoming reading invalidates the current position.
 
-## Fabricantes
+## Board support
 
-| Driver | Estado | Capacidades actuales |
+| Driver | Status | Current capabilities |
 | --- | --- | --- |
-| Chessnut clásico | Extraído de la prueba del Go; pendiente de hardware | Leer posición, controlar luces |
-| ChessUp / ChessUp 2 | Pendiente, no registrado | Ninguna anunciada todavía |
+| Classic Chessnut | Extracted from the Go probe; hardware validation pending | Read positions, control lights |
+| ChessUp / ChessUp 2 | Not implemented or registered yet | None advertised |
 
-El registro clásico reconoce nombres Chessnut y excluye explícitamente Move y Evo, que no deben recibir este protocolo por coincidencia de marca. Go es el objetivo de las pruebas físicas; no se asegura compatibilidad de todos los firmware clásicos.
+The classic registry recognizes Chessnut names and explicitly excludes Move and Evo, which must not receive this protocol based only on the brand name. Go is the target for physical testing; compatibility with every classic firmware version is not guaranteed.
 
-## Agregar otro tablero
+## Add another board
 
-Todo se cambia dentro de este paquete:
+All changes belong inside this package:
 
-1. Implementar `BoardDriver` internamente: capacidades, perfil Bluetooth, comandos iniciales, codificación de comandos y decodificación de notificaciones.
-2. Agregar una fábrica y un filtro de nombre a `DriverRegistry.standard`. Cada conexión crea un driver nuevo para no compartir buffers ni estado de protocolo.
-3. Emitir eventos normalizados `position` / `move`; un driver puede responder al tablero mediante eventos `write`. Extender su handshake o transporte en el módulo si el hardware requiere otra negociación.
-4. Agregar fixtures del protocolo y validar con hardware real. Las apps siguen consumiendo la misma interfaz y consultando capacidades.
+1. Implement an internal `BoardDriver`: capabilities, Bluetooth profile, initial commands, command encoding, and notification decoding.
+2. Add a factory and name filter to `DriverRegistry.standard`. Each connection creates a new driver, so buffers and protocol state are not shared.
+3. Emit normalized `position` / `move` events. A driver can respond to the board through `write` events. Extend the handshake or transport inside the module if the hardware requires a different negotiation.
+4. Add protocol fixtures and validate with real hardware. Consumer apps keep using the same interface and checking capabilities.
 
-`BoardConnect` es la fachada pública; `BluetoothSession` resuelve el transporte; los drivers conocen los mensajes del fabricante. No hay UUIDs, canales o paquetes Bluetooth en la interfaz pública. PGN, catálogo de partidas, debounce de estudio y confirmación de objetivos pertenecen a la app consumidora.
+`BoardConnect` is the public facade, `BluetoothSession` handles transport, and drivers understand manufacturer messages. UUIDs, characteristics, and Bluetooth packets do not appear in the public interface. PGN import, game catalogs, study debounce, and target-position confirmation belong to the consuming app.
 
-El paquete puede copiarse a un repositorio independiente manteniendo su `Package.swift`. Chess Dex usa una dependencia local para que el desarrollo y las pruebas no requieran publicar nada.
+The package can be moved to an independent repository while keeping its `Package.swift`. Chess Dex uses a local dependency so development and testing do not require publishing a release.
 
-## App de prueba independiente
+## Independent test app
 
-[`Examples/ConnectTestApp`](Examples/ConnectTestApp/README.md) contiene un proyecto Xcode de iPhone que consume el paquete local. Permite buscar y conectar tableros, inspeccionar posiciones y capacidades, encender casillas, reconectar y exportar logs. No depende de Chess Dex ni incorpora lógica de partidas.
+[`Examples/ConnectTestApp`](Examples/ConnectTestApp/README.md) contains an iPhone Xcode project that consumes the local package. It can scan for and connect to boards, inspect positions and capabilities, light up squares, reconnect, and export logs. It has no dependency on Chess Dex or game-study logic.
 
-Abrir `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, elegir tu equipo de firma y ejecutar en un iPhone físico. La guía del ejemplo incluye el checklist de hardware. El flujo recomendado es: tests del paquete → test app con tablero físico → integración en Chess Dex.
+Open `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, select your signing team, and run on a physical iPhone. The example's guide includes a hardware checklist. Recommended workflow: package tests → test app with a physical board → Chess Dex integration.
 
 ## Tests
 
@@ -92,10 +94,11 @@ Abrir `Examples/ConnectTestApp/ConnectTestApp.xcodeproj`, elegir tu equipo de fi
 swift test
 ```
 
-Se verifican bytes conocidos del protocolo, orientación, paquetes parciales, entradas inválidas, contrato de comandos sin conexión, múltiples suscriptores y registro de un driver adicional de prueba. Los tests no encienden Bluetooth. No se ha incorporado código de la extensión Chessconnect.
+Tests cover known protocol bytes, orientation, fragmented packets, invalid input, disconnected-command behavior, multiple subscribers, and registration of an additional test driver. Tests do not turn on Bluetooth. No code from the Chessconnect extension has been incorporated.
 
-Fuentes del protocolo clásico:
-- https://github.com/chessnutech/Chessnut_eBoards
-- https://github.com/chessnutech/EasyLinkSDK/blob/main/sdk/EasyLink.cpp
+Classic protocol sources:
 
-El envío de luces usa 10 bytes, conforme al código del SDK del fabricante; su README es ambiguo al mencionar 34 bytes y mostrar un comando de 10. Confirmar con el Go antes de declarar compatibilidad validada.
+- [Manufacturer documentation](https://github.com/chessnutech/Chessnut_eBoards)
+- [Official SDK implementation](https://github.com/chessnutech/EasyLinkSDK/blob/main/sdk/EasyLink.cpp)
+
+The lights command uses 10 bytes, matching the manufacturer's SDK code. Its README is ambiguous: it mentions 34 bytes while showing a 10-byte command. Confirm behavior on the Go before claiming validated compatibility.

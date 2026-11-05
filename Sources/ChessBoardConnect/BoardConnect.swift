@@ -6,7 +6,7 @@ import Combine
 public final class BoardConnect: BoardConnecting {
     @Published public private(set) var devices: [BoardDevice] = []
     @Published public private(set) var state: ConnectionState = .idle
-    @Published public private(set) var status = "Bluetooth sin iniciar"
+    @Published public private(set) var status = "Bluetooth not started"
     @Published public private(set) var position: BoardPosition?
     @Published public private(set) var lastMove: BoardMove?
     @Published public private(set) var capabilities: BoardCapabilities = []

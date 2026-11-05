@@ -86,10 +86,9 @@
 			};
 			buildConfigurationList = 00000000000000000000000A /* Build configuration list for PBXProject "ConnectTestApp" */;
 			compatibilityVersion = "Xcode 14.0";
-			developmentRegion = es;
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				es,
 				en,
 				Base,
 			);
@@ -160,7 +159,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Connect Test";
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Connect Test usa Bluetooth para verificar la conexión, las posiciones y los comandos de tu tablero electrónico.";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Connect Test uses Bluetooth to test your electronic chessboard connection, positions, and commands.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -181,7 +180,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Connect Test";
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Connect Test usa Bluetooth para verificar la conexión, las posiciones y los comandos de tu tablero electrónico.";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Connect Test uses Bluetooth to test your electronic chessboard connection, positions, and commands.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;

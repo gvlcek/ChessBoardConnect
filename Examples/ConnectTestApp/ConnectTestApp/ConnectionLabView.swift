@@ -5,7 +5,7 @@ import ChessBoardConnect
 struct ConnectionLabView: View {
     @StateObject private var connect = BoardConnect()
     @Environment(\.scenePhase) private var phase
-    @State private var selectedName = "Sin seleccionar"
+    @State private var selectedName = "Not selected"
     @State private var lightSquares = "e2 e4"
     @State private var moveFrom = "e2"
     @State private var moveTo = "e4"
@@ -21,29 +21,29 @@ struct ConnectionLabView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("Probá la conexión y los datos del tablero sin abrir Chess Dex.")
+                    Text("Test board connectivity and data without opening Chess Dex.")
                         .font(.callout).foregroundStyle(.secondary)
                     Label(connect.status, systemImage: connect.ready ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right")
-                    LabeledContent("Estado", value: stateName)
-                    LabeledContent("Tablero seleccionado", value: selectedName)
+                    LabeledContent("Status", value: stateName)
+                    LabeledContent("Selected board", value: selectedName)
                     HStack {
-                        Button("Buscar") { connect.scan() }
+                        Button("Scan") { connect.scan() }
                             .disabled(connect.scanning || connect.connectedOrConnecting)
-                        if connect.scanning { Button("Detener") { connect.stopScan() } }
+                        if connect.scanning { Button("Stop") { connect.stopScan() } }
                         if connect.connectedOrConnecting {
-                            Button("Desconectar") { connect.disconnect() }
+                            Button("Disconnect") { connect.disconnect() }
                         } else if connect.canReconnect {
-                            Button("Reconectar") { perform { try connect.reconnect() } }
+                            Button("Reconnect") { perform { try connect.reconnect() } }
                         }
                     }.buttonStyle(.bordered)
-                    Text("Encendé el tablero y desconectalo de otras apps. La búsqueda pide permiso Bluetooth la primera vez.")
+                    Text("Turn on the board and disconnect other apps. The first scan requests Bluetooth permission.")
                         .font(.caption).foregroundStyle(.secondary)
-                } header: { Text("Conexión") }
+                } header: { Text("Connection") }
 
                 if !connect.connectedOrConnecting {
-                    Section("Tableros encontrados · \(connect.devices.count)") {
+                    Section("Boards found · \(connect.devices.count)") {
                         if connect.devices.isEmpty {
-                            Text(connect.scanning ? "Buscando dispositivos compatibles…" : "Iniciá una búsqueda para elegir tu tablero.")
+                            Text(connect.scanning ? "Scanning for compatible devices…" : "Start a scan to select your board.")
                                 .foregroundStyle(.secondary)
                         }
                         ForEach(connect.devices) { device in
@@ -63,37 +63,37 @@ struct ConnectionLabView: View {
                     }
                 }
 
-                Section("Capacidades del tablero conectado") {
-                    capability("Lectura de posiciones", .readPosition)
-                    capability("Control de luces", .controlLights)
-                    capability("Envío de jugadas", .sendMove)
-                    capability("Carga de posiciones", .loadPosition)
-                    Text("Las capacidades son declaradas por el driver. Hay que verificarlas físicamente.")
+                Section("Connected board capabilities") {
+                    capability("Read positions", .readPosition)
+                    capability("Control lights", .controlLights)
+                    capability("Send moves", .sendMove)
+                    capability("Load positions", .loadPosition)
+                    Text("Capabilities are reported by the driver. Verify them on the physical board.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
-                Section("Posición recibida · blancas abajo") {
+                Section("Received position · White at the bottom") {
                     if let position = connect.position {
                         boardGrid(position)
                         Text(position.fen).font(.caption.monospaced()).textSelection(.enabled)
                     } else {
-                        Text("Sin lectura vigente").foregroundStyle(.secondary)
+                        Text("No current reading").foregroundStyle(.secondary)
                     }
-                    LabeledContent("Lecturas de esta sesión", value: "\(readingCount)")
+                    LabeledContent("Readings this session", value: "\(readingCount)")
                     if let lastReading {
-                        LabeledContent("Última lectura", value: lastReading.formatted(date: .omitted, time: .standard))
+                        LabeledContent("Last reading", value: lastReading.formatted(.dateTime.hour().minute().second().locale(Locale(identifier: "en_US_POSIX"))))
                     }
-                    Button("Solicitar posición") { perform { try connect.refresh() } }
+                    Button("Request position") { perform { try connect.refresh() } }
                         .disabled(!supports(.readPosition))
-                    Text("La posición de arriba viene del tablero. No es una partida simulada ni una posición objetivo.")
+                    Text("The position above comes from the board. It is not a simulation or a target position.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
-                Section("Luces") {
-                    TextField("Casillas, por ejemplo e2 e4", text: $lightSquares)
+                Section("Lights") {
+                    TextField("Squares, for example e2 e4", text: $lightSquares)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                     HStack {
-                        Button("Encender") {
+                        Button("Turn on") {
                             perform {
                                 let names = lightSquares.lowercased().split { $0.isWhitespace || $0 == "," }
                                 let indices = names.compactMap { BoardPosition.index(String($0)) }
@@ -101,17 +101,17 @@ struct ConnectionLabView: View {
                                 try connect.showLights(indices)
                             }
                         }
-                        Button("Apagar todas") { perform { try connect.showLights([]) } }
+                        Button("Turn all off") { perform { try connect.showLights([]) } }
                     }.buttonStyle(.bordered).disabled(!supports(.controlLights))
-                    Text("Confirmá mirando el tablero que se iluminan las casillas indicadas.")
+                    Text("Check the physical board to confirm that the selected squares light up.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
                 if supports(.sendMove) {
-                    Section("Enviar jugada") {
-                        TextField("Origen", text: $moveFrom).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        TextField("Destino", text: $moveTo).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        Button("Enviar") {
+                    Section("Send move") {
+                        TextField("From", text: $moveFrom).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("To", text: $moveTo).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Button("Send") {
                             perform {
                                 guard let from = BoardPosition.index(moveFrom.lowercased()), let to = BoardPosition.index(moveTo.lowercased()) else { throw LabError.invalidSquares }
                                 try connect.send(.sendMove(BoardMove(from: from, to: to)))
@@ -120,26 +120,26 @@ struct ConnectionLabView: View {
                     }
                 }
                 if supports(.loadPosition) {
-                    Section("Cargar posición") {
-                        TextField("FEN completo", text: $fen, axis: .vertical)
+                    Section("Load position") {
+                        TextField("Full FEN", text: $fen, axis: .vertical)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
-                        Button("Enviar posición") { perform { try connect.send(.loadPosition(fen)) } }
+                        Button("Send position") { perform { try connect.send(.loadPosition(fen)) } }
                     }
                 }
                 if let move = connect.lastMove {
-                    Section("Última jugada reportada") {
+                    Section("Last reported move") {
                         Text("\(BoardPosition.name(move.from)) → \(BoardPosition.name(move.to))")
                     }
                 }
                 if !commandResult.isEmpty {
                     Section { Text(commandResult).font(.caption).foregroundStyle(.secondary) }
                 }
-                Section("Diagnóstico") {
-                    TextField("Firmware del tablero (opcional)", text: $firmware)
+                Section("Diagnostics") {
+                    TextField("Board firmware (optional)", text: $firmware)
                     ShareLink(item: diagnosticReport) {
-                        Label("Exportar registro", systemImage: "square.and.arrow.up")
+                        Label("Export log", systemImage: "square.and.arrow.up")
                     }
-                    Text("Se exportan los últimos 200 eventos, incluidos mensajes TX/RX, y los datos del dispositivo que figuran en el informe.")
+                    Text("Exports the last 200 events, including TX/RX messages, and the device information shown in the report.")
                         .font(.caption).foregroundStyle(.secondary)
                     ForEach(Array(connect.logs.suffix(20).enumerated()), id: \.offset) { _, line in
                         Text(line).font(.caption2.monospaced()).textSelection(.enabled)
@@ -147,8 +147,8 @@ struct ConnectionLabView: View {
                 }
             }
             .navigationTitle("Connect Test")
-            .alert("No se pudo completar", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("Cerrar", role: .cancel) { errorMessage = nil }
+            .alert("Action failed", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                Button("Close", role: .cancel) { errorMessage = nil }
             } message: { Text(errorMessage ?? "") }
             .onReceive(connect.$position) { position in
                 if position != nil { lastReading = Date(); readingCount += 1 }
@@ -168,27 +168,27 @@ struct ConnectionLabView: View {
         connect.ready && connect.capabilities.contains(capability)
     }
     private func capability(_ title: String, _ capability: BoardCapabilities) -> some View {
-        LabeledContent(title, value: !connect.ready ? "Sin conexión" : supports(capability) ? "Disponible" : "No disponible")
+        LabeledContent(title, value: !connect.ready ? "Not connected" : supports(capability) ? "Available" : "Unavailable")
     }
     private func perform(_ action: () throws -> Void) {
         do {
             try action()
-            commandResult = "Acción solicitada. En los comandos, encolado no equivale a ejecución física: verificá el tablero y la respuesta."
+            commandResult = "Action requested. Queued commands do not confirm physical execution: check the board and its response."
         } catch {
-            commandResult = "La acción falló."
+            commandResult = "The action failed."
             errorMessage = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
         }
     }
     private var stateName: String {
         switch connect.state {
-        case .idle: "En espera"
-        case .scanning: "Buscando"
-        case .discovered: "Búsqueda completada"
-        case .connecting: "Conectando"
-        case .discoveringServices: "Preparando comunicación"
-        case .connected: "Conectado"
-        case .receivingPosition: "Recibiendo posiciones"
-        case .disconnected: "Desconectado"
+        case .idle: "Idle"
+        case .scanning: "Scanning"
+        case .discovered: "Scan complete"
+        case .connecting: "Connecting"
+        case .discoveringServices: "Discovering services"
+        case .connected: "Connected"
+        case .receivingPosition: "Receiving positions"
+        case .disconnected: "Disconnected"
         case .failed(let message): "Error: \(message)"
         }
     }
@@ -197,14 +197,14 @@ struct ConnectionLabView: View {
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         return """
         ChessBoardConnect · ConnectTestApp \(version) (\(build))
-        Fecha: \(Date().formatted(.iso8601))
-        Dispositivo: \(UIDevice.current.model), \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)
-        Tablero seleccionado: \(selectedName)
-        Firmware (informado manualmente): \(firmware.isEmpty ? "No informado" : firmware)
-        Estado: \(stateName)
-        Capacidades: \(connect.capabilities.rawValue)
-        Posición vigente: \(connect.position?.fen ?? "Sin lectura")
-        Lecturas: \(readingCount)
+        Date: \(Date().formatted(.iso8601))
+        Device: \(UIDevice.current.model), \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)
+        Selected board: \(selectedName)
+        Firmware (entered manually): \(firmware.isEmpty ? "Not provided" : firmware)
+        Status: \(stateName)
+        Capabilities: \(connect.capabilities.rawValue)
+        Current position: \(connect.position?.fen ?? "No reading")
+        Readings: \(readingCount)
 
         \(connect.logs.joined(separator: "\n"))
         """
@@ -225,5 +225,5 @@ struct ConnectionLabView: View {
 }
 private enum LabError: LocalizedError {
     case invalidSquares
-    var errorDescription: String? { "Ingresá casillas entre a1 y h8, separadas por espacios o comas. Por ejemplo: e2 e4." }
+    var errorDescription: String? { "Enter squares from a1 to h8, separated by spaces or commas. For example: e2 e4." }
 }

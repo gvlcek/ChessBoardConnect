@@ -5,7 +5,7 @@ import Combine
 @MainActor
 final class BluetoothSession: NSObject, ObservableObject {
     @Published private(set) var devices: [BoardDevice] = []
-    @Published private(set) var status = "Bluetooth sin iniciar" { didSet { log(status) } }
+    @Published private(set) var status = "Bluetooth not started" { didSet { log(status) } }
     @Published private(set) var ready = false
     @Published private(set) var scanning = false
     @Published private(set) var position: BoardPosition?
@@ -36,7 +36,7 @@ final class BluetoothSession: NSObject, ObservableObject {
         // Lazily created after the user taps Search; this triggers the iOS permission.
     }
     private func log(_ text: String) {
-        logs.append("\(Date().formatted(date: .omitted, time: .standard))  \(text)")
+        logs.append("\(Date().formatted(.iso8601))  \(text)")
         if logs.count > 200 { logs.removeFirst(logs.count - 200) }
     }
     func scan() {
@@ -49,14 +49,14 @@ final class BluetoothSession: NSObject, ObservableObject {
     private func startScan() {
         guard central.state == .poweredOn, scanRequested else { return }
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
-        scanning = true; state = .scanning; status = "Buscando tableros compatibles…"; log(status)
+        scanning = true; state = .scanning; status = "Scanning for compatible boards…"; log(status)
         watchdog?.cancel()
         watchdog = Task { [weak self] in
             try? await Task.sleep(for: .seconds(12))
             guard !Task.isCancelled, let self else { return }
             self.central.stopScan(); self.scanning = false; self.scanRequested = false
             self.state = .discovered
-            self.status = self.devices.isEmpty ? "No encontramos tableros. Cerrá otras apps y volvé a buscar." : "Elegí tu tablero"
+            self.status = self.devices.isEmpty ? "No boards found. Disconnect other apps and scan again." : "Select your board"
         }
     }
     func connect(_ id: UUID) throws {
@@ -67,12 +67,12 @@ final class BluetoothSession: NSObject, ObservableObject {
         driver = selectedDriver; capabilities = selectedDriver.capabilities; state = .connecting
         watchdog?.cancel(); scanRequested = false; scanning = false; central.stopScan()
         lastDevice = id; active = peripheral; peripheral.delegate = self
-        status = "Conectando con \(peripheral.name ?? "Tablero")…"; log(status)
+        status = "Connecting to \(peripheral.name ?? "Board")…"; log(status)
         central.connect(peripheral)
         watchdog = Task { [weak self] in
             try? await Task.sleep(for: .seconds(15))
             guard !Task.isCancelled else { return }
-            self?.fail("La conexión tardó demasiado. Intentá reconectar.")
+            self?.fail("Connection timed out. Try reconnecting.")
         }
     }
     func reconnect() throws {
@@ -81,14 +81,14 @@ final class BluetoothSession: NSObject, ObservableObject {
     }
     func stopScan() {
         central?.stopScan(); scanRequested = false; scanning = false
-        if active == nil { watchdog?.cancel(); state = .idle; status = "Búsqueda detenida" }
+        if active == nil { watchdog?.cancel(); state = .idle; status = "Scan stopped" }
     }
     var canReconnect: Bool { active == nil && lastDevice != nil }
     var connectedOrConnecting: Bool { active != nil }
     func disconnect() {
         stopScan()
         if let active { central.cancelPeripheralConnection(active) }
-        reset(); state = .disconnected; status = "Desconectado"
+        reset(); state = .disconnected; status = "Disconnected"
     }
     private func fail(_ message: String) {
         central?.stopScan(); scanRequested = false; scanning = false
@@ -148,7 +148,7 @@ final class BluetoothSession: NSObject, ObservableObject {
             writeTimeout = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { return }
-                self?.fail("El tablero no confirmó el comando. Reconectá para continuar.")
+                self?.fail("The board did not acknowledge the command. Reconnect to continue.")
             }
         }
     }
@@ -165,7 +165,7 @@ final class BluetoothSession: NSObject, ObservableObject {
         guard !ready, let active, active.state == .connected,
               command != nil, !notifications.isEmpty, notifications.allSatisfy({ $0.isNotifying }) else { return }
         watchdog?.cancel(); ready = true; state = .connected
-        status = "Conectado · esperando posición"; log(status)
+        status = "Connected · waiting for position"; log(status)
         driver?.initialCommands.forEach { enqueue($0) }; waitForPosition()
     }
     private func waitForPosition() {
@@ -173,7 +173,7 @@ final class BluetoothSession: NSObject, ObservableObject {
         watchdog = Task { [weak self] in
             try? await Task.sleep(for: .seconds(8))
             guard !Task.isCancelled, let self, self.position == nil else { return }
-            self.status = "Conectado, sin posición. Mové una pieza o tocá Solicitar posición."
+            self.status = "Connected, no position received. Move a piece or tap Request position."
             self.log(self.status)
         }
     }
@@ -185,11 +185,11 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn: startScan()
-        case .unauthorized: fail("Permití Bluetooth en Ajustes → Privacidad y seguridad → Bluetooth.")
-        case .poweredOff: fail("Bluetooth apagado. Activá Bluetooth y buscá de nuevo.")
-        case .unsupported: fail("Este dispositivo no admite Bluetooth LE.")
-        case .resetting: fail("Bluetooth se está reiniciando. Buscá de nuevo.")
-        default: status = "Esperando Bluetooth…"
+        case .unauthorized: fail("Allow Bluetooth in Settings → Privacy & Security → Bluetooth.")
+        case .poweredOff: fail("Bluetooth is off. Turn it on and scan again.")
+        case .unsupported: fail("This device does not support Bluetooth LE.")
+        case .resetting: fail("Bluetooth is resetting. Scan again.")
+        default: status = "Waiting for Bluetooth…"
         }
         if central.state != .poweredOn { scanning = false }
     }
@@ -199,19 +199,19 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
         peripherals[peripheral.identifier] = peripheral
         let device = BoardDevice(id: peripheral.identifier, name: name, rssi: RSSI.intValue, capabilities: candidate.capabilities)
         if let index = devices.firstIndex(where: { $0.id == device.id }) { devices[index] = device }
-        else { devices.append(device); log("Encontrado: \(name) · \(device.id)") }
+        else { devices.append(device); log("Found: \(name) · \(device.id)") }
     }
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         guard active === peripheral else { return }
-        state = .discoveringServices; status = "Descubriendo servicios…"; log(status)
+        state = .discoveringServices; status = "Discovering services…"; log(status)
         peripheral.discoverServices(profile.map { $0.services.keys.map { CBUUID(string: $0) } })
     }
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        guard active === peripheral else { return }; fail("No se pudo conectar: \(error?.localizedDescription ?? "sin detalle")")
+        guard active === peripheral else { return }; fail("Connection failed: \(error?.localizedDescription ?? "no details")")
     }
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         guard active === peripheral else { return }
-        reset(); state = .disconnected; status = "Se perdió la conexión. Podés reconectar y recuperar la posición."; log(status)
+        reset(); state = .disconnected; status = "Connection lost. Reconnect to receive a fresh position."; log(status)
     }
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard active === peripheral else { return }
@@ -219,7 +219,7 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
         guard let profile else { return }
         let services = peripheral.services ?? []
         guard profile.services.keys.allSatisfy({ id in services.contains { $0.uuid == CBUUID(string: id) } }) else {
-            fail("Faltan los servicios Bluetooth esperados para este tablero."); return
+            fail("The expected Bluetooth services are missing for this board."); return
         }
         for service in services {
             if let ids = profile.services[service.uuid.uuidString.lowercased()] {
@@ -233,17 +233,17 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
         let found = service.characteristics ?? []
         for id in profile.services[service.uuid.uuidString.lowercased()] ?? [] {
             guard let characteristic = found.first(where: { $0.uuid == CBUUID(string: id) }) else {
-                fail("Falta un canal Bluetooth requerido."); return
+                fail("A required Bluetooth characteristic is missing."); return
             }
             if characteristic.uuid == CBUUID(string: profile.writeID) {
                 guard characteristic.properties.contains(.write) || characteristic.properties.contains(.writeWithoutResponse) else {
-                    fail("El canal de comandos no permite escribir."); return
+                    fail("The command characteristic does not support writes."); return
                 }
                 command = characteristic
             }
             if profile.notificationIDs.contains(id) {
                 guard characteristic.properties.contains(.notify) || characteristic.properties.contains(.indicate) else {
-                    fail("El canal de datos no permite notificaciones."); return
+                    fail("The data characteristic does not support notifications."); return
                 }
                 notifications.append(characteristic); peripheral.setNotifyValue(true, for: characteristic)
             }
@@ -258,7 +258,7 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard active === peripheral, var receivingDriver = driver,
               profile?.notificationIDs.contains(characteristic.uuid.uuidString.lowercased()) == true else { return }
-        if let error { position = nil; log("Error de recepción: \(error.localizedDescription)"); return }
+        if let error { position = nil; log("Receive error: \(error.localizedDescription)"); return }
         guard let bytes = characteristic.value else { return }
         log("RX " + bytes.map { String(format: "%02X", $0) }.joined(separator: " "))
         do {
@@ -268,19 +268,19 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
                 switch event {
                 case .position(let decoded):
                     watchdog?.cancel(); state = .receivingPosition
-                    status = "Conectado · recibiendo posiciones"; position = decoded
+                    status = "Connected · receiving positions"; position = decoded
                 case .move(let move): lastMove = move
                 case .write(let bytes): enqueue(bytes)
                 }
             }
         } catch {
             driver = receivingDriver; position = nil
-            log("Datos descartados: \(error)")
+            log("Discarded data: \(error)")
         }
     }
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         guard active === peripheral, characteristic.uuid == command?.uuid, writing else { return }
-        if let error { fail("Error al enviar: \(error.localizedDescription)"); return }
+        if let error { fail("Send error: \(error.localizedDescription)"); return }
         finishWrite()
     }
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
