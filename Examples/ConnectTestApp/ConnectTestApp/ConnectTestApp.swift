@@ -14,11 +14,14 @@ private struct LabRootView: View {
                 Text("ChessUp").tag(LabMode.chessUp)
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal).padding(.top, 8)
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
             // Conditional views release the previous session when changing modes.
             if mode == .board { ConnectionLabView() }
             else { ChessUpConnectionLabView() }
         }
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
     }
 }
 private enum LabMode: Hashable { case board, chessUp }
