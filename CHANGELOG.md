@@ -7,6 +7,8 @@ Changes after the latest release are listed under **Unreleased** until a new ver
 
 ### Added
 
+- Library regression tests for radio-reset bookkeeping, cancellation object identity, corrupt Chessnut frame batches, and stateful read/light preparation.
+- A library review report documenting corrections, remaining API work, and hardware validation boundaries.
 - Example view-model tests for discovery, capabilities, command validation, readings, session cleanup, and export lifecycle races without Bluetooth.
 - This changelog and contributor guidance for keeping it up to date.
 - An invitation to help add and test more chessboard models, with the maintainer's contact email.
@@ -16,6 +18,14 @@ Changes after the latest release are listed under **Unreleased** until a new ver
 - Separated the example screen from its view model and injectable board client; moved the position grid and native share sheet into dedicated views.
 - Replaced the ChessUp-specific screen boolean with discovery presets; command sections now follow connected-board capabilities.
 - Clarified that consuming apps build only the library; the example app and test targets remain separate.
+
+### Fixed
+
+- Clear stale peripheral handles and cancellation bookkeeping when Bluetooth becomes unavailable; require fresh discovery and avoid issuing stop/cancel commands while the manager is unavailable.
+- Match pending cancellation callbacks by peripheral object identity as well as UUID in the connection and inspection transports.
+- Preserve valid Chessnut readings around corrupt frames within a single notification, while logging and invalidating corrupt readings in wire order.
+- Route lights and refresh through common transactional driver preparation and write-size preflight; replace queued work only after preparation succeeds.
+- Avoid duplicate no-position timeout log entries.
 
 ## [0.1.0] - 2026-11-05
 

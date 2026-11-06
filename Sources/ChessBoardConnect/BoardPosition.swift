@@ -34,6 +34,7 @@ public struct BoardPosition: Equatable, Sendable {
         guard chars.count == 2, chars[1].isASCII, let file = "abcdefgh".firstIndex(of: chars[0]), let rank = chars[1].wholeNumberValue, (1...8).contains(rank) else { return nil }
         return (8 - rank) * 8 + "abcdefgh".distance(from: "abcdefgh".startIndex, to: file)
     }
+    /// Algebraic name for a normalized square. The index must be in `0..<64`.
     public static func name(_ index: Int) -> String { "\(Array("abcdefgh")[index % 8])\(8 - index / 8)" }
     public var fen: String {
         (0..<8).map { row in

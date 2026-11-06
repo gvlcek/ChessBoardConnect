@@ -6,9 +6,11 @@ import CoreBluetooth
 final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
     var onEvent: ((BLEInspectionEvent) -> Void)?
     private var central: CBCentralManager?
-    private var peripherals: [UUID: CBPeripheral] = [:]
-    private var active: CBPeripheral?
-    private var cancelling: Set<UUID> = []
+    private var peers = PeripheralRegistry<CBPeripheral>()
+    private var active: CBPeripheral? {
+        get { peers.active }
+        set { peers.active = newValue }
+    }
     private var scanRequested = false
     private var connectedLookupRequested = false
     // Nordic UART is used by ChessUp but is not unique to it. This only finds candidates.
@@ -18,7 +20,7 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
 
     func scan() {
         guard active == nil else { return }
-        scanRequested = true; peripherals = [:]
+        scanRequested = true; peers.discovered = [:]
         if central == nil {
             emit(.waitingForBluetooth, "Waiting for Bluetooth permission and availability…")
             central = CBCentralManager(delegate: self, queue: .main)
@@ -26,7 +28,7 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
     }
     func checkConnectedDevices() {
         guard active == nil else { return }
-        connectedLookupRequested = true; peripherals = [:]
+        connectedLookupRequested = true; peers.discovered = [:]
         if central == nil {
             emit(.waitingForBluetooth, "Waiting for Bluetooth to check system-connected UART devices…")
             central = CBCentralManager(delegate: self, queue: .main)
@@ -43,7 +45,7 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
         // is still required before service inspection. No advertisements are inferred.
         let candidates = central.retrieveConnectedPeripherals(withServices: [Self.connectedServiceFilter])
         for peripheral in candidates {
-            peripherals[peripheral.identifier] = peripheral
+            peers.discovered[peripheral.identifier] = peripheral
             onEvent?(.device(BLEDiagnosticDevice(id: peripheral.identifier,
                 name: peripheral.name ?? "Unnamed connected device", localName: nil,
                 advertisedServices: [], rssi: 127, isConnectable: nil, source: .systemConnection)))
@@ -69,14 +71,15 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
     }
     func stopScan() {
         guard scanRequested || connectedLookupRequested else { return }
-        central?.stopScan(); scanRequested = false; connectedLookupRequested = false; watchdog?.cancel()
+        if central?.state == .poweredOn { central?.stopScan() }
+        scanRequested = false; connectedLookupRequested = false; watchdog?.cancel()
         emit(.scanComplete, "Scan stopped. Select a device to inspect its GATT metadata.")
     }
     func inspect(_ id: UUID) {
-        guard active == nil, !cancelling.contains(id) else {
+        guard active == nil, !peers.isRetiring(id) else {
             emit(.failed("Device busy"), "The previous connection is still closing. Try again shortly."); return
         }
-        guard central?.state == .poweredOn, let peripheral = peripherals[id] else {
+        guard central?.state == .poweredOn, let peripheral = peers.discovered[id] else {
             emit(.failed("Device unavailable"), "Device unavailable. Check Bluetooth and scan again."); return
         }
         stopScan()
@@ -86,7 +89,8 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
         armTimeout("Connection timed out. Check that the board is on and try discovery again.")
     }
     func disconnect() {
-        central?.stopScan(); scanRequested = false; connectedLookupRequested = false
+        if central?.state == .poweredOn { central?.stopScan() }
+        scanRequested = false; connectedLookupRequested = false
         release(cancel: true)
         emit(.disconnected, "Disconnected. Collected metadata is retained for export.")
     }
@@ -95,14 +99,15 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
         if let active {
             active.delegate = nil
             if cancel {
-                cancelling.insert(active.identifier)
-                central?.cancelPeripheralConnection(active)
+                peers.beginCancellation(active, id: active.identifier)
+                if central?.state == .poweredOn { central?.cancelPeripheralConnection(active) }
             }
         }
         active = nil
     }
     private func fail(_ message: String) {
-        central?.stopScan(); scanRequested = false; connectedLookupRequested = false
+        if central?.state == .poweredOn { central?.stopScan() }
+        scanRequested = false; connectedLookupRequested = false
         release(cancel: true)
         emit(.failed(message), message)
     }
@@ -116,7 +121,9 @@ final class CoreBluetoothInspectionTransport: NSObject, BLEInspectionTransport {
         }
     }
     private func bluetoothUnavailable(_ state: CBManagerState) {
-        central?.stopScan(); scanRequested = false; connectedLookupRequested = false; release(cancel: false); cancelling = []
+        scanRequested = false; connectedLookupRequested = false
+        release(cancel: false)
+        peers.invalidate()
         let message: String
         switch state {
         case .unauthorized: message = "Allow Bluetooth in Settings → Privacy & Security → Bluetooth."
@@ -159,11 +166,11 @@ extension CoreBluetoothInspectionTransport: @preconcurrency CBCentralManagerDele
             if connectedLookupRequested { lookupConnectedDevices() }
             else { startScan() }
         }
-        else if central.state != .unknown { bluetoothUnavailable(central.state) }
+        else if central.state != .unknown || peers.hasReferences { bluetoothUnavailable(central.state) }
     }
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
         guard scanRequested else { return }
-        peripherals[peripheral.identifier] = peripheral
+        peers.discovered[peripheral.identifier] = peripheral
         let localName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
         let services = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? [])
             + (advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID] ?? [])
@@ -179,14 +186,14 @@ extension CoreBluetoothInspectionTransport: @preconcurrency CBCentralManagerDele
         peripheral.discoverServices(nil)
     }
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        if cancelling.remove(peripheral.identifier) != nil { return }
+        if peers.finishCancellation(peripheral, id: peripheral.identifier) { return }
         guard active === peripheral else { return }
         release(cancel: false)
         let message = "Connection failed: \(error?.localizedDescription ?? "no details")"
         emit(.failed(message), message)
     }
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        if cancelling.remove(peripheral.identifier) != nil { return }
+        if peers.finishCancellation(peripheral, id: peripheral.identifier) { return }
         guard active === peripheral else { return }
         release(cancel: false)
         if let error {

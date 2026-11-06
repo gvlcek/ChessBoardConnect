@@ -1,5 +1,7 @@
 # Pre-publication review · 2026-11-05
 
+A subsequent [library review](LIBRARY_REVIEW_2026-11-06.md) records additional findings, corrections, and current validation limits.
+
 Reviewed the public API, main-actor/Combine publication, BLE discovery and lifecycle, write queue and timeouts, both drivers/codecs, metadata diagnostics, example app, signing, report export, tests, documentation, and repository contents.
 
 ## Findings addressed

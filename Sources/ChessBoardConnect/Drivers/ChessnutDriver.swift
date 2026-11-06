@@ -16,6 +16,9 @@ struct ChessnutDriver: BoardDriver {
     func lightsCommand(_ squares: [Int]) throws -> Data { ChessnutCodec.leds(squares) }
     mutating func receive(_ data: Data, characteristic: String) throws -> [DriverEvent] {
         guard profile.notificationIDs.contains(characteristic.lowercased()) else { return [] }
-        return try frames.append(data).map { .position(try ChessnutCodec.decode($0)) }
+        return frames.append(data).map { frame in
+            do { return .position(try ChessnutCodec.decode(frame)) }
+            catch { return .invalidData(String(describing: error)) }
+        }
     }
 }

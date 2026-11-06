@@ -14,6 +14,7 @@ struct BluetoothProfile {
 enum DriverEvent {
     case position(BoardPosition)
     case move(BoardMove)
+    case invalidData(String)
     case write(Data)
     case status(String)
 }

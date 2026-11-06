@@ -22,7 +22,7 @@ When publishing a release, move the pending entries into a section with the vers
 
 ## Board drivers
 
-Keep transport and manufacturer details inside the package. Add independent packet fixtures, normalize coordinates, and advertise only implemented capabilities. Distinguish queued writes, protocol acknowledgments, and physical actions. Do not infer sensor positions from commands or claim firmware support from compilation alone.
+Keep transport and manufacturer details inside the package. Implement drivers as value types (structs): transactional command preflight stages a copy and must not mutate shared reference state. Override `prepare` when commands require protocol state changes, and report corrupt readings without discarding valid later frames from the same notification. Add independent packet fixtures, normalize coordinates, and advertise only implemented capabilities. Distinguish queued writes, protocol acknowledgments, and physical actions. Do not infer sensor positions from commands or claim firmware support from compilation alone.
 
 ## Bug reports
 
