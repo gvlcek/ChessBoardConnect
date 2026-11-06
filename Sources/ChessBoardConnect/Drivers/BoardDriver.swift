@@ -15,6 +15,7 @@ enum DriverEvent {
     case position(BoardPosition)
     case move(BoardMove)
     case invalidData(String)
+    case commandConfirmed
     case write(Data)
     case status(String)
 }

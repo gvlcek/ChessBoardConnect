@@ -60,6 +60,7 @@ SwiftUI apps can observe `BoardConnect` with `@StateObject` and its published pr
 - `position`: the placement of all 64 squares, normalized as the first FEN field. It does not infer the turn, castling rights, or legality.
 - `lastMove`: the last move reported by a driver that emits moves. The Chessnut driver delivers positions and does not infer moves. The ChessUp driver delivers move events without claiming a sensor position.
 - `capabilities`: whether the connected board supports reading positions, controlling lights, sending moves, or loading positions.
+- `events`: live typed connection/position/move events and manufacturer protocol confirmations. `submit` returns a command correlation UUID; protocol confirmation is separate from physical completion.
 - `send`: common commands. Throws `unsupportedCapability` when the connected driver does not provide the requested operation. A successful return means the command was queued, not that a person moved the pieces.
 - `showLights` / `refresh`: shortcuts for the corresponding commands.
 - `disconnect`, `reconnect`, `stopScan`: explicit connection lifecycle. Disconnecting discards the current position and pending commands. Reconnecting requires a new reading.
@@ -83,6 +84,21 @@ I'd love to support more electronic chessboards in the future. I currently own a
 
 If you own another board, have protocol documentation, or would like to help add or test support for a new model, I'd be happy to hear from you. You can reach me at [gvlcek@icloud.com](mailto:gvlcek@icloud.com).
 
+## Unified move guidance
+
+`BoardGuidance` adds an optional workflow above the existing connection: prepare a session, guide one move with its expected resulting position, and observe typed progress/completion. The consuming app does not branch on Chessnut versus ChessUp. The expected position comes from the app's chess logic; no PGN parser or chess engine is included.
+
+```swift
+let guidance = BoardGuidance(connect: connect) // Retain alongside the connection.
+try guidance.prepareSession(fen: initialFullFEN)
+// After guidance.state becomes .ready:
+let requestID = try guidance.guideMove(move, expectedPosition: positionAfterMove)
+```
+
+On Go, guidance compares fresh sensor readings and updates difference lights. On ChessUp, it uses the move/FEN protocol and distinguishes protocol acceptance from a matching physical move report. Completion includes its evidence; move-reporting boards do not claim a sensor position. While guidance owns the connection, raw command submission is blocked. Cancellation may close a move-protocol board's local connection.
+
+See [the move guidance guide](docs/MoveGuidance.md) for a complete example, state semantics, cancellation, and the shared test-app procedure. This workflow is new on `main`, is not part of the existing `0.1.0` tag, and still requires end-to-end hardware validation.
+
 ## Add another board
 
 All changes belong inside this package:
@@ -92,7 +108,7 @@ All changes belong inside this package:
 3. Emit normalized `position` / `move` events. A driver can respond to the board through `write` events. Extend the handshake or transport inside the module if the hardware requires a different negotiation.
 4. Add protocol fixtures and validate with real hardware. Consumer apps keep using the same interface and checking capabilities.
 
-`BoardConnect` is the public facade, `BluetoothSession` handles transport, and drivers understand manufacturer messages. UUIDs, characteristics, and Bluetooth packets do not appear in the public interface. PGN import, game catalogs, study debounce, and target-position confirmation belong to the consuming app.
+`BoardConnect` is the public facade, `BluetoothSession` handles transport, and drivers understand manufacturer messages. UUIDs, characteristics, and Bluetooth packets do not appear in the public interface. `BoardGuidance` coordinates a move supplied by the app, including hardware-specific cues and completion detection. PGN import, chess rules, computing target positions, game catalogs, and advancing a game's move cursor belong to the consuming app.
 
 The package is independent of any consuming app. Add it using Swift Package Manager or a local checkout.
 
@@ -130,7 +146,7 @@ The test app's **ChessUp** screen now uses `BoardConnect` and the experimental C
 swift test
 ```
 
-Tests cover known protocol bytes, orientation, fragmented packets, invalid input, disconnected-command behavior, multiple subscribers, and registration of an additional test driver. Tests do not turn on Bluetooth. No code from the Chessconnect extension has been incorporated.
+Tests cover known protocol bytes, orientation, fragmented packets, invalid input, disconnected-command behavior, multiple subscribers, registration of an additional test driver, and unified guidance with typed confirmations, cancellation, promotions, and stable sensor matching. Tests do not turn on Bluetooth. No code from the Chessconnect extension has been incorporated.
 
 Classic protocol sources:
 

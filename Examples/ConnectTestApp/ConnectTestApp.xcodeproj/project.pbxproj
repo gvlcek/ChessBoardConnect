@@ -16,6 +16,7 @@
 		B30000000000000000000003 /* ConnectionLabViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000003 /* ConnectionLabViewModel.swift */; };
 		B30000000000000000000004 /* BoardPositionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000004 /* BoardPositionView.swift */; };
 		B30000000000000000000005 /* ReportShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000005 /* ReportShareSheet.swift */; };
+		B30000000000000000000006 /* GuidanceLabSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000006 /* GuidanceLabSection.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,6 +30,7 @@
 		B40000000000000000000003 /* ConnectionLabViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionLabViewModel.swift; sourceTree = "<group>"; };
 		B40000000000000000000004 /* BoardPositionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardPositionView.swift; sourceTree = "<group>"; };
 		B40000000000000000000005 /* ReportShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportShareSheet.swift; sourceTree = "<group>"; };
+		B40000000000000000000006 /* GuidanceLabSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidanceLabSection.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,6 +60,7 @@
 			children = (
 				000000000000000000000068 /* ConnectTestApp.swift */,
 				000000000000000000000069 /* ConnectionLabView.swift */,
+				B40000000000000000000006 /* GuidanceLabSection.swift */,
 				B40000000000000000000005 /* ReportShareSheet.swift */,
 				B40000000000000000000004 /* BoardPositionView.swift */,
 			);
@@ -158,6 +161,7 @@
 			files = (
 				0000000000000000000000CC /* ConnectTestApp.swift in Sources */,
 				0000000000000000000000CD /* ConnectionLabView.swift in Sources */,
+				B30000000000000000000006 /* GuidanceLabSection.swift in Sources */,
 				B30000000000000000000005 /* ReportShareSheet.swift in Sources */,
 				B30000000000000000000004 /* BoardPositionView.swift in Sources */,
 				B30000000000000000000003 /* ConnectionLabViewModel.swift in Sources */,

@@ -38,6 +38,16 @@ An accepted command is **queued**. The app's confirmation does not prove that th
 
 Both modes provide a **Clear logs** button beside the export controls. It clears the recorded events without disconnecting, resetting reading counters, or removing position/GATT snapshots. New events continue to appear while a session is active; exported reports still include their current summary and snapshot.
 
+## Unified move guidance
+
+Both discovery presets include **Unified move guidance**, using the same `BoardGuidance` API. Arrange the initial pieces and tap **Prepare guidance session**. Wait for readiness, then use `e2 → e4` and the default expected position with **Guide move**. Completion must follow the physical action; command acceptance alone is insufficient.
+
+The form accepts an explicit expected position because this diagnostic app does not contain a chess engine. When changing the move, also supply the correct resulting FEN. For `e7 → e5` after e4, use `rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR`.
+
+Manual command sections are hidden while guidance owns the connection. Sensor readings and logs remain visible. Cancelling queues lights off on an idle position/light protocol; cancelling a move protocol closes the local connection because an accepted move cannot be reliably withdrawn. Reconnect and prepare again before resuming. The report includes the guidance state.
+
+See [the library guidance guide](../../docs/MoveGuidance.md) for completion evidence, state/error semantics, and the full hardware checklist. The coordinator and driver-fixture tests pass without Bluetooth; the new complete flow still needs verification on both physical boards.
+
 ## ChessUp study protocol (experimental)
 
 The **ChessUp** tab now uses the normal `BoardConnect` facade and its ChessUp driver, including notifications and commands. Driver-independent `BoardDiagnostics` remains available in the package for future investigations.
@@ -86,7 +96,7 @@ If the Go reports only when pieces move, move and return a piece after requestin
 ## App architecture and tests
 
 - `ConnectTestApp.swift` selects a `LabConfiguration` from a data-driven list. A configuration describes discovery and instructions, not a board's capabilities. Changing its identity creates a fresh screen/model and stops the old session.
-- `ConnectionLabView` renders state and forwards user actions to `ConnectionLabViewModel`. `BoardPositionView` and `ReportShareSheet` handle the grid and native sharing UI separately.
+- `ConnectionLabView` renders state and forwards user actions to `ConnectionLabViewModel`. `GuidanceLabSection`, `BoardPositionView`, and `ReportShareSheet` handle the guidance form, grid, and native sharing UI separately.
 - `ConnectionLabViewModel` owns input validation, command actions, reading counters, foreground refresh, and export presentation/cancellation. It never implements a manufacturer protocol or treats a queued command as board confirmation.
 - `LabBoardClient` is an example-only dependency boundary. `LiveLabBoardClient` forwards the library's public Combine updates and actions; tests inject a fake client without starting Bluetooth. The public library API remains unchanged.
 - `ReportExport` owns background file generation. The view model accepts an injectable exporter and clock so export snapshots, failures, dismissal, and cancellation races can be tested deterministically.

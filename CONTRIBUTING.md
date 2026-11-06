@@ -24,6 +24,8 @@ When publishing a release, move the pending entries into a section with the vers
 
 Keep transport and manufacturer details inside the package. Implement drivers as value types (structs): transactional command preflight stages a copy and must not mutate shared reference state. Override `prepare` when commands require protocol state changes, and report corrupt readings without discarding valid later frames from the same notification. Add independent packet fixtures, normalize coordinates, and advertise only implemented capabilities. Distinguish queued writes, protocol acknowledgments, and physical actions. Do not infer sensor positions from commands or claim firmware support from compilation alone.
 
+When a driver completes an explicitly acknowledged command, emit `DriverEvent.commandConfirmed` only after its final protocol acknowledgment. Bluetooth write acknowledgment is not physical execution. Keep guidance behavior capability-based, and validate the complete workflow with hardware before advertising support. See [MoveGuidance.md](docs/MoveGuidance.md).
+
 ## Bug reports
 
 Include board model and firmware, OS/device version, reproduction steps, expected versus actual behavior, and a minimal diagnostic log. Review logs before posting: peripheral identifiers, device names, positions, and test notes may be personal. Do not attach account credentials.

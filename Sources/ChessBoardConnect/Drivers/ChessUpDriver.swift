@@ -47,7 +47,7 @@ struct ChessUpDriver: BoardDriver {
         case 0x24:
             guard case .settings = pending else { return [] }
             pending = nil; initialized = true
-            return [.status("ChessUp study session confirmed. Ready for moves.")]
+            return [.status("ChessUp study session confirmed. Ready for moves."), .commandConfirmed]
         case 0x22:
             return confirmMove()
         case 0x26:
@@ -60,7 +60,7 @@ struct ChessUpDriver: BoardDriver {
         case 0x23:
             guard case .promotion = pending else { return [] }
             pending = nil
-            return [.status("ChessUp confirmed promotion.")]
+            return [.status("ChessUp confirmed promotion."), .commandConfirmed]
         case 0xa3:
             guard bytes.count >= 6, bytes[1] == 0x35,
                   bytes[2...5].allSatisfy({ $0 < 8 }) else { throw BoardError.invalidPacket }
@@ -87,7 +87,7 @@ struct ChessUpDriver: BoardDriver {
             return [.write(Data([0x97, Self.promotionCode(promotion)])), .status("ChessUp confirmed move; sending promotion…")]
         }
         pending = nil
-        return [.status("ChessUp confirmed move \(BoardPosition.name(move.from)) → \(BoardPosition.name(move.to)).")]
+        return [.status("ChessUp confirmed move \(BoardPosition.name(move.from)) → \(BoardPosition.name(move.to))."), .commandConfirmed]
     }
     static func wireIndex(_ square: Int) -> UInt8 { UInt8((7 - square / 8) * 8 + square % 8) }
     private static func promotionCode(_ piece: Character) -> UInt8 {

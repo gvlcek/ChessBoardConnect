@@ -18,10 +18,11 @@ struct ConnectionLabView: View {
                 connectionSection
                 if !model.board.connectedOrConnecting { discoverySection }
                 capabilitiesSection
+                if model.hasGuidance { GuidanceLabSection(model: model) }
                 if model.supports(.readPosition) { positionSection }
-                if model.supports(.controlLights) { lightsSection }
-                if model.supports(.loadPosition) { loadPositionSection }
-                if model.supports(.sendMove) { sendMoveSection }
+                if model.supports(.controlLights), !model.board.guidanceActive { lightsSection }
+                if model.supports(.loadPosition), !model.board.guidanceActive { loadPositionSection }
+                if model.supports(.sendMove), !model.board.guidanceActive { sendMoveSection }
                 if let move = model.lastMoveDescription {
                     Section("Last reported move") { Text(move) }
                 }
@@ -108,7 +109,7 @@ struct ConnectionLabView: View {
             if let lastReading = model.lastReading {
                 LabeledContent("Last reading", value: lastReading.formatted(.dateTime.hour().minute().second().locale(Locale(identifier: "en_US_POSIX"))))
             }
-            Button("Request position") { model.refresh() }
+            Button("Request position") { model.refresh() }.disabled(model.board.guidanceActive)
             Text("The position above comes from the board. It is not a simulation or a target position.")
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -139,15 +140,7 @@ struct ConnectionLabView: View {
         Section("Send move") {
             Text("Load a position first. Wait for the board confirmation in the status before sending another command.")
                 .font(.caption).foregroundStyle(.secondary)
-            TextField("From", text: $model.moveFrom).textInputAutocapitalization(.never).autocorrectionDisabled()
-            TextField("To", text: $model.moveTo).textInputAutocapitalization(.never).autocorrectionDisabled()
-            Picker("Promotion", selection: $model.promotion) {
-                Text("None").tag("")
-                Text("Queen").tag("q")
-                Text("Rook").tag("r")
-                Text("Bishop").tag("b")
-                Text("Knight").tag("n")
-            }
+            MoveInputFields(from: $model.moveFrom, to: $model.moveTo, promotion: $model.promotion)
             Button("Send") { model.sendMove() }
         }
     }

@@ -41,8 +41,12 @@ final class ConnectionLabViewModel: ObservableObject {
     @Published var promotion = ""
     @Published var fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     @Published var firmware = ""
+    @Published var expectedFEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR"
+    @Published private(set) var guidanceState: BoardGuidanceState = .idle
+    @Published private(set) var guidanceDifferences: [Int] = []
 
     private let client: any LabBoardClient
+    private let guidance: (any LabGuiding)?
     private let exporter: any LabReportExporting
     private let now: () -> Date
     private var subscription: AnyCancellable?
@@ -54,12 +58,50 @@ final class ConnectionLabViewModel: ObservableObject {
          exporter: any LabReportExporting = FileLabReportExporter(), now: @escaping () -> Date = Date.init) {
         self.configuration = configuration
         self.client = client
+        self.guidance = client.guidance
         self.exporter = exporter
         self.now = now
         subscription = client.events.sink { [weak self] in self?.receive($0) }
     }
 
     var canSearch: Bool { !board.scanning && !board.connectedOrConnecting }
+    var hasGuidance: Bool { guidance != nil }
+    var canPrepareGuidance: Bool {
+        guard board.ready, guidance?.isSupported == true else { return false }
+        return switch guidanceState { case .preparing, .awaitingMove: false; default: true }
+    }
+    var canGuideMove: Bool { board.ready && guidanceState.canGuideMove }
+    var guidanceDescription: String {
+        switch guidanceState {
+        case .idle: "Not started"
+        case .preparing: "Preparing session · waiting for board confirmation"
+        case .ready: "Ready to guide a move"
+        case .awaitingMove(let request): "Waiting for \(Self.describe(request.move))"
+        case .completed(let result): result.evidence == .sensorPosition ? "Completed · sensor position matched" : "Completed · physical move reported"
+        case .cancelled: "Cancelled"
+        case .failed(let error): error.errorDescription ?? "Guidance failed"
+        }
+    }
+    var guidanceDifferenceDescription: String {
+        guidanceDifferences.map(BoardPosition.name).joined(separator: " ")
+    }
+    func prepareGuidance() {
+        perform {
+            guard let guidance else { throw BoardGuidanceError.unsupportedBoard }
+            try guidance.prepareSession(fen: fen)
+        }
+    }
+    func guideMove() {
+        perform {
+            guard let guidance else { throw BoardGuidanceError.unsupportedBoard }
+            let target: BoardPosition
+            do { target = try BoardPosition(fen: expectedFEN) }
+            catch { throw BoardGuidanceError.invalidPosition }
+            try guidance.guideMove(validatedMove(), expectedPosition: target)
+        }
+    }
+    func cancelGuidance() { guidance?.cancel() }
+
     var canExport: Bool { !exporting && reportToRemove == nil }
 
     func supports(_ capability: BoardCapabilities) -> Bool {
@@ -107,7 +149,10 @@ final class ConnectionLabViewModel: ObservableObject {
     }
     func clearLogs() { client.clearLogs() }
     func refresh() { perform { try require(.readPosition); try client.send(.requestPosition) } }
-    func sceneDidBecomeActive() { if supports(.readPosition) { refresh() } }
+    func sceneDidBecomeActive() {
+        if board.guidanceActive { guidance?.refresh() }
+        else if supports(.readPosition) { refresh() }
+    }
 
     func turnLightsOn() {
         perform {
@@ -123,13 +168,17 @@ final class ConnectionLabViewModel: ObservableObject {
     func sendMove() {
         perform {
             try require(.sendMove)
-            guard let from = BoardPosition.index(moveFrom.lowercased()),
-                  let to = BoardPosition.index(moveTo.lowercased()),
-                  promotion.isEmpty || (promotion.count == 1 && "qrbn".contains(promotion)) else {
-                throw LabInputError.invalidSquares
-            }
-            try client.send(.sendMove(BoardMove(from: from, to: to, promotion: promotion.first)))
+            try client.send(.sendMove(validatedMove()))
         }
+    }
+
+    private func validatedMove() throws -> BoardMove {
+        guard let from = BoardPosition.index(moveFrom.lowercased()),
+              let to = BoardPosition.index(moveTo.lowercased()),
+              promotion.isEmpty || (promotion.count == 1 && "qrbn".contains(promotion)) else {
+            throw LabInputError.invalidSquares
+        }
+        return try BoardMove(from: from, to: to, promotion: promotion.first)
     }
 
     func exportReport(metadata: ReportMetadata) {
@@ -144,7 +193,8 @@ final class ConnectionLabViewModel: ObservableObject {
             "Capabilities: \(board.capabilities.rawValue)",
             "Last reported move: \(lastMoveDescription ?? "None")",
             "Current position: \(board.position?.fen ?? "No reading")",
-            "Readings: \(readingCount)"
+            "Readings: \(readingCount)",
+            "Guidance: \(guidanceDescription)"
         ], logs: board.logs)
         let id = UUID()
         exportID = id
@@ -187,12 +237,14 @@ final class ConnectionLabViewModel: ObservableObject {
         exportTask = nil
         exporting = false
         reportDismissed()
+        guidance?.cancel()
         client.stopScan()
         client.disconnect()
     }
 
     private func require(_ capability: BoardCapabilities) throws {
         guard board.ready else { throw ConnectError.notConnected }
+        guard !board.guidanceActive else { throw ConnectError.busy }
         guard supports(capability) else { throw ConnectError.unsupportedCapability }
     }
     private func perform(_ action: () throws -> Void) {
@@ -222,6 +274,9 @@ final class ConnectionLabViewModel: ObservableObject {
         case .scanning(let value): board.scanning = value
         case .canReconnect(let value): board.canReconnect = value
         case .logs(let value): board.logs = value
+        case .guidance(let value): guidanceState = value
+        case .guidanceDifferences(let value): guidanceDifferences = value
+        case .guidanceActive(let value): board.guidanceActive = value
         }
     }
     private static func describe(_ move: BoardMove) -> String {

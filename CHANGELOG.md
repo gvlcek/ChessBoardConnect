@@ -7,6 +7,10 @@ Changes after the latest release are listed under **Unreleased** until a new ver
 
 ### Added
 
+- Optional `BoardGuidance` with a common prepare/guide/cancel workflow, typed progress, exact sensor matching, and reported-move completion evidence.
+- Live `BoardConnect.events` and command IDs from `submit`, with explicit ChessUp protocol confirmations distinct from physical moves.
+- Connection ownership during guidance, stable-reading handling, and cancellation cleanup without automatic move retries.
+- A unified guidance form in the iPhone test app, consumer documentation, and coordinator/driver-fixture/example tests. The new complete workflow still requires physical validation.
 - Library regression tests for radio-reset bookkeeping, cancellation object identity, corrupt Chessnut frame batches, and stateful read/light preparation.
 - Example view-model tests for discovery, capabilities, command validation, readings, session cleanup, and export lifecycle races without Bluetooth.
 - This changelog and contributor guidance for keeping it up to date.

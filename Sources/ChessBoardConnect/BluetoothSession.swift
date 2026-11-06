@@ -9,12 +9,16 @@ final class BluetoothSession: NSObject, ObservableObject {
     @Published private(set) var ready = false
     @Published private(set) var scanning = false
     @Published private(set) var canReconnect = false
-    @Published private(set) var position: BoardPosition?
-    @Published private(set) var lastMove: BoardMove?
+    @Published private(set) var position: BoardPosition? { didSet { eventSubject.send(.position(position)) } }
+    @Published private(set) var lastMove: BoardMove? { didSet { if let lastMove { eventSubject.send(.move(lastMove)) } } }
     @Published private(set) var logs: [String] = []
-    @Published private(set) var state: ConnectionState = .idle
+    @Published private(set) var state: ConnectionState = .idle { didSet { eventSubject.send(.connectionState(state)) } }
     @Published private(set) var capabilities: BoardCapabilities = []
 
+    private let eventSubject = PassthroughSubject<BoardEvent, Never>()
+    var events: AnyPublisher<BoardEvent, Never> { eventSubject.eraseToAnyPublisher() }
+    var hasPendingProtocolCommand: Bool { driver?.commandPending == true }
+    private var pendingProtocolID: UUID?
     private let registry: DriverRegistry
     private var driver: (any BoardDriver)?
     private var profile: BluetoothProfile? { driver?.profile }
@@ -172,41 +176,42 @@ final class BluetoothSession: NSObject, ObservableObject {
     private func reset() {
         watchdog?.cancel(); writeTask?.cancel(); writeTimeout?.cancel(); replyTimeout?.cancel()
         ready = false; active = nil; command = nil; notifications = []
-        queued = []; writing = false; driver = nil; capabilities = []
+        queued = []; writing = false; driver = nil; pendingProtocolID = nil; capabilities = []
         position = nil; lastMove = nil
         updateReconnectAvailability()
     }
-    func showLights(_ squares: [Int]) throws {
+    func showLights(_ squares: [Int], id: UUID = UUID()) throws {
         guard ready else { throw ConnectError.notConnected }
         guard capabilities.contains(.controlLights) else { throw ConnectError.unsupportedCapability }
         guard squares.allSatisfy({ (0..<64).contains($0) }) else { throw ConnectError.invalidSquare }
-        try prepare(.setLights(squares), kind: .lights)
+        try prepare(.setLights(squares), id: id, kind: .lights)
     }
-    func refresh() throws {
+    func refresh(id: UUID = UUID()) throws {
         guard ready else { throw ConnectError.notConnected }
         guard capabilities.contains(.readPosition) else { throw ConnectError.unsupportedCapability }
-        try prepare(.requestPosition, kind: .refresh)
+        try prepare(.requestPosition, id: id, kind: .refresh)
         waitForPosition()
     }
-    func send(_ command: BoardCommand) throws {
+    func send(_ command: BoardCommand, id: UUID = UUID()) throws {
         switch command {
-        case .requestPosition: try refresh()
-        case .setLights(let squares): try showLights(squares)
+        case .requestPosition: try refresh(id: id)
+        case .setLights(let squares): try showLights(squares, id: id)
         case .sendMove(let move):
             guard ready else { throw ConnectError.notConnected }
             guard capabilities.contains(.sendMove) else { throw ConnectError.unsupportedCapability }
-            try prepare(.sendMove(move))
+            try prepare(.sendMove(move), id: id)
         case .loadPosition(let fen):
             guard ready else { throw ConnectError.notConnected }
             guard capabilities.contains(.loadPosition) else { throw ConnectError.unsupportedCapability }
-            try prepare(.loadPosition(fen))
+            try prepare(.loadPosition(fen), id: id)
         }
     }
-    private func prepare(_ command: BoardCommand, kind: CommandKind = .general) throws {
+    private func prepare(_ command: BoardCommand, id: UUID, kind: CommandKind = .general) throws {
         guard ready, let driver, let active, let characteristic = self.command else { throw ConnectError.notConnected }
         let type: CBCharacteristicWriteType = characteristic.properties.contains(.write) ? .withResponse : .withoutResponse
         let prepared = try DriverCommands.prepare(command, driver: driver, maximumLength: active.maximumWriteValueLength(for: type))
         self.driver = prepared.driver
+        if prepared.driver.commandPending { pendingProtocolID = id }
         if case .loadPosition = command { lastMove = nil }
         if case .requestPosition = command { position = nil }
         // Replace queued patterns/refreshes only after preparation succeeds.
@@ -262,8 +267,12 @@ final class BluetoothSession: NSObject, ObservableObject {
         guard !ready, let active, active.state == .connected,
               command != nil, let profile, notifications.count == profile.notificationIDs.count,
               !notifications.isEmpty, notifications.allSatisfy({ $0.isNotifying }) else { return }
-        watchdog?.cancel(); ready = true; state = .connected
+        watchdog?.cancel(); ready = true
+        guard self.active === active, ready else { return }
+        state = .connected
+        guard self.active === active, ready else { return }
         status = capabilities.contains(.readPosition) ? "Connected · waiting for position" : "Connected · load a full FEN to start a study session"
+        guard self.active === active, ready else { return }
         driver?.initialCommands.forEach { enqueue($0) }
         if capabilities.contains(.readPosition) { waitForPosition() }
     }
@@ -370,13 +379,23 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
             let events = try receivingDriver.receive(bytes, characteristic: characteristic.uuid.uuidString.lowercased())
             let wasPending = driver?.commandPending == true
             driver = receivingDriver
+            let confirmedID = wasPending && !receivingDriver.commandPending ? pendingProtocolID : nil
+            if confirmedID != nil {
+                pendingProtocolID = nil
+                replyTimeout?.cancel()
+            } else if receivingDriver.commandPending, events.contains(where: {
+                if case .status = $0 { return true }; return false
+            }) { updateReplyTimeout() }
             for event in events {
+                guard ready, active === peripheral else { break }
                 switch event {
                 case .position(let decoded):
                     watchdog?.cancel()
                     if state != .receivingPosition { state = .receivingPosition }
                     if status != "Connected · receiving positions" { status = "Connected · receiving positions" }
                     position = decoded
+                case .commandConfirmed:
+                    if let confirmedID { eventSubject.send(.commandConfirmed(confirmedID)) }
                 case .invalidData(let description):
                     position = nil
                     log("Discarded data: \(description)")
@@ -387,8 +406,6 @@ extension BluetoothSession: @preconcurrency CBCentralManagerDelegate, @preconcur
                 case .status(let message): status = message
                 }
             }
-            if wasPending && !receivingDriver.commandPending { replyTimeout?.cancel() }
-            else if events.contains(where: { if case .status = $0 { true } else { false } }) && receivingDriver.commandPending { updateReplyTimeout() }
         } catch {
             driver = receivingDriver; position = nil
             log("Discarded data: \(error)")
