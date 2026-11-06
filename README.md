@@ -139,11 +139,11 @@ Classic protocol sources:
 
 The lights command uses 10 bytes, matching the manufacturer's SDK code. Its README is ambiguous: it mentions 34 bytes while showing a 10-byte command. Basic e2/e4 light control has been verified on one Go. Other firmware versions and the complete hardware checklist remain unverified.
 
-## Contributing and review
+## Contributing
 
 See [CHANGELOG.md](CHANGELOG.md) for released versions and unreleased changes.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and hardware reports, [the library review](docs/LIBRARY_REVIEW_2026-11-06.md) for current findings and limitations, and [the initial review notes](docs/REVIEW.md) for earlier fixes and validation. CI runs package tests (including the example view model and report exporter) and an unsigned iPhone example build on macOS.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and hardware reports, and the [test app guide](Examples/ConnectTestApp/README.md) for hardware validation steps and current limitations. CI runs package tests (including the example view model and report exporter) and an unsigned iPhone example build on macOS.
 
 ## License
 

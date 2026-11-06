@@ -8,7 +8,6 @@ Changes after the latest release are listed under **Unreleased** until a new ver
 ### Added
 
 - Library regression tests for radio-reset bookkeeping, cancellation object identity, corrupt Chessnut frame batches, and stateful read/light preparation.
-- A library review report documenting corrections, remaining API work, and hardware validation boundaries.
 - Example view-model tests for discovery, capabilities, command validation, readings, session cleanup, and export lifecycle races without Bluetooth.
 - This changelog and contributor guidance for keeping it up to date.
 - An invitation to help add and test more chessboard models, with the maintainer's contact email.
@@ -42,7 +41,7 @@ The API and experimental board support may change before 1.0.
 - A separate iPhone example app for testing connections, positions, lights, ChessUp study commands, and diagnostic log export without a consuming app.
 - Bounded diagnostic logs and controls to clear them without disconnecting.
 - Protocol and API tests, example report-export tests, and CI checks for package tests and an unsigned iPhone example build.
-- English documentation, contribution and review guides, an MIT license, and the project logo.
+- English documentation, a contribution guide, an MIT license, and the project logo.
 - A local signing configuration template so personal signing settings stay out of shared project files.
 
 ### Fixed
@@ -58,7 +57,7 @@ The API and experimental board support may change before 1.0.
 
 Hardware checks cover basic flows on the owner's Chessnut Go and ChessUp 2.
 Other models and firmware versions, special moves, recovery scenarios, and report export under a live hardware stream still need further validation.
-See [the review notes](docs/REVIEW.md) for evidence and remaining checks.
+See the [test app guide](Examples/ConnectTestApp/README.md#hardware-checklist) for hardware checks and remaining validation.
 
 [Unreleased]: https://github.com/gvlcek/ChessBoardConnect/compare/0.1.0...HEAD
 [0.1.0]: https://github.com/gvlcek/ChessBoardConnect/releases/tag/0.1.0
