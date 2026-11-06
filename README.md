@@ -110,7 +110,7 @@ The only public Swift Package Manager product is the `ChessBoardConnect` library
 | --- | --- |
 | Add the library to your app | `ChessBoardConnect` and its Apple framework dependencies |
 | Clone this repository and open the example Xcode project | The separate iPhone test app, which consumes the library |
-| Run `swift test` in this repository | The library tests and the example report-export support tests |
+| Run `swift test` in this repository | The library tests and the example view-model/report-export tests |
 
 Swift Package Manager may fetch the entire source repository, including `Examples/`. Those files being present in a checkout does not make the example an installed app, an exported product, or part of a consuming app's binary. Dependency test targets are not part of the library product either. To run the test app, explicitly open its Xcode project from a clone of this repository.
 
@@ -143,7 +143,7 @@ The lights command uses 10 bytes, matching the manufacturer's SDK code. Its READ
 
 See [CHANGELOG.md](CHANGELOG.md) for released versions and unreleased changes.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and hardware reports, and [the review notes](docs/REVIEW.md) for fixes, evidence, and remaining validation work. CI runs package tests (including the example report exporter) and an unsigned iPhone example build on macOS.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and hardware reports, and [the review notes](docs/REVIEW.md) for fixes, evidence, and remaining validation work. CI runs package tests (including the example view model and report exporter) and an unsigned iPhone example build on macOS.
 
 ## License
 

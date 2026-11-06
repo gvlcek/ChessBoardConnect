@@ -47,3 +47,13 @@ MIT license selected by the owner. Shared docs/UI use English. Current tracked f
 - iPhone 17 Pro / iOS 26.1 Simulator build passed; native report export opened and dismissed twice. Temporary report cleanup was verified in the app container.
 - No device profiling or fresh BLE regression run was performed during this review. Existing hardware evidence is listed separately above.
 - No common credential patterns were found by a heuristic scan of existing Git blobs; that scan is not a guarantee against every possible secret format.
+
+## Post-release example architecture review · 2026-11-05
+
+The original example put its subscriptions, command validation, reading counters, connection actions, and report lifecycle inside `ConnectionLabView`. It also selected board-specific UI with a `chessUpOnly` boolean. The original 24 tests covered the library and report-file exporter, but not that screen's presentation logic.
+
+The example now uses a `ConnectionLabViewModel` with an injectable example-only `LabBoardClient`, exporter, and clock. The live adapter consumes the library's public publishers and forwards their emitted values directly. The view renders presentation state and delegates actions; the board grid and native share sheet are separate views. `LabConfiguration` presets describe discovery instructions, while command sections depend on the connected board's capabilities. Changing presets creates a new model and stops the old session. No public library API or driver implementation changed.
+
+Added 13 tests covering discovery (including a future configuration), capability gating, invalid inputs, command failures, received readings/moves, foreground refresh, session cleanup, live adapter initial/disconnect updates, stable export snapshots, error recovery, dismissal cleanup, and cancelled export completions racing with a new export.
+
+Validation: all 37 tests passed on macOS; unsigned generic iPhone and iPhone Simulator builds passed. In Simulator, switching to ChessUp updated the discovery action/instructions, exporting opened the native share sheet with a text report, dismissal restored the export button, and switching back created a clean Board test screen. These checks do not establish physical Bluetooth behavior after the refactor; repeat the example's hardware checklist with both boards.

@@ -11,6 +11,11 @@
 		0000000000000000000000CD /* ConnectionLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000069 /* ConnectionLabView.swift */; };
 		A00000000000000000000001 /* ChessBoardConnect in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000002 /* ChessBoardConnect */; };
 		A20000000000000000000001 /* ReportExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* ReportExport.swift */; };
+		B30000000000000000000001 /* LabConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000001 /* LabConfiguration.swift */; };
+		B30000000000000000000002 /* LabBoardClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000002 /* LabBoardClient.swift */; };
+		B30000000000000000000003 /* ConnectionLabViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000003 /* ConnectionLabViewModel.swift */; };
+		B30000000000000000000004 /* BoardPositionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000004 /* BoardPositionView.swift */; };
+		B30000000000000000000005 /* ReportShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000005 /* ReportShareSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -18,7 +23,12 @@
 		000000000000000000000068 /* ConnectTestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectTestApp.swift; sourceTree = "<group>"; };
 		000000000000000000000069 /* ConnectionLabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionLabView.swift; sourceTree = "<group>"; };
 		A10000000000000000000001 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
-		A20000000000000000000002 /* ReportExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Support/ReportExport.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* ReportExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportExport.swift; sourceTree = "<group>"; };
+		B40000000000000000000001 /* LabConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabConfiguration.swift; sourceTree = "<group>"; };
+		B40000000000000000000002 /* LabBoardClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabBoardClient.swift; sourceTree = "<group>"; };
+		B40000000000000000000003 /* ConnectionLabViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionLabViewModel.swift; sourceTree = "<group>"; };
+		B40000000000000000000004 /* BoardPositionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardPositionView.swift; sourceTree = "<group>"; };
+		B40000000000000000000005 /* ReportShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportShareSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -38,6 +48,7 @@
 			children = (
 				000000000000000000000003 /* ConnectTestApp */,
 				000000000000000000000004 /* Products */,
+				B50000000000000000000001 /* Support */,
 				A10000000000000000000002 /* Config */,
 			);
 			sourceTree = "<group>";
@@ -47,7 +58,8 @@
 			children = (
 				000000000000000000000068 /* ConnectTestApp.swift */,
 				000000000000000000000069 /* ConnectionLabView.swift */,
-				A20000000000000000000002 /* ReportExport.swift */,
+				B40000000000000000000005 /* ReportShareSheet.swift */,
+				B40000000000000000000004 /* BoardPositionView.swift */,
 			);
 			path = ConnectTestApp;
 			sourceTree = "<group>";
@@ -64,6 +76,17 @@
 			isa = PBXGroup;
 			children = (A10000000000000000000001 /* Signing.xcconfig */);
 			path = Config;
+			sourceTree = "<group>";
+		};
+		B50000000000000000000001 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				B40000000000000000000001 /* LabConfiguration.swift */,
+				B40000000000000000000002 /* LabBoardClient.swift */,
+				B40000000000000000000003 /* ConnectionLabViewModel.swift */,
+				A20000000000000000000002 /* ReportExport.swift */,
+			);
+			path = Support;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -135,6 +158,11 @@
 			files = (
 				0000000000000000000000CC /* ConnectTestApp.swift in Sources */,
 				0000000000000000000000CD /* ConnectionLabView.swift in Sources */,
+				B30000000000000000000005 /* ReportShareSheet.swift in Sources */,
+				B30000000000000000000004 /* BoardPositionView.swift in Sources */,
+				B30000000000000000000003 /* ConnectionLabViewModel.swift in Sources */,
+				B30000000000000000000002 /* LabBoardClient.swift in Sources */,
+				B30000000000000000000001 /* LabConfiguration.swift in Sources */,
 				A20000000000000000000001 /* ReportExport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

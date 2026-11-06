@@ -7,11 +7,14 @@ Changes after the latest release are listed under **Unreleased** until a new ver
 
 ### Added
 
+- Example view-model tests for discovery, capabilities, command validation, readings, session cleanup, and export lifecycle races without Bluetooth.
 - This changelog and contributor guidance for keeping it up to date.
 - An invitation to help add and test more chessboard models, with the maintainer's contact email.
 
 ### Changed
 
+- Separated the example screen from its view model and injectable board client; moved the position grid and native share sheet into dedicated views.
+- Replaced the ChessUp-specific screen boolean with discovery presets; command sections now follow connected-board capabilities.
 - Clarified that consuming apps build only the library; the example app and test targets remain separate.
 
 ## [0.1.0] - 2026-11-05

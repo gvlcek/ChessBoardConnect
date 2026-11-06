@@ -26,7 +26,7 @@ See [Apple's build configuration file documentation](https://developer.apple.com
 ## Screens and controls
 
 - **Connection:** module status, scanning, stopping a scan, board selection, disconnecting, and reconnecting.
-- **Capabilities:** reading positions, controlling lights, sending moves, and loading positions, as reported by the connected driver. The current Go implementation offers reading and lights. ChessUp provides an experimental move/FEN protocol, pending hardware validation.
+- **Capabilities:** reading positions, controlling lights, sending moves, and loading positions, as reported by the connected driver. The current Go implementation offers reading and lights. ChessUp provides an experimental move/FEN protocol; its basic study flow has been verified on one ChessUp 2.
 - **Position:** all 64 received squares, coordinates, and the first FEN field, plus a counter and the last reading time. Disconnecting or requesting a new reading invalidates the previous position.
 - **Lights:** enter squares such as `e2 e4` or `a1, h8`, turn them on, and turn all lights off. Invalid input is rejected.
 - **Moves / FEN:** controls appear only when a driver advertises these capabilities; they are not simulated for the Go.
@@ -82,6 +82,18 @@ Record the board model, firmware, iPhone, and iOS version:
 | Export the log | The report reflects the current state and includes TX/RX events |
 
 If the Go reports only when pieces move, move and return a piece after requesting a position. When a failure occurs, export the log before its 200 events rotate out. Note the expected and actual squares and the reproduction steps.
+
+## App architecture and tests
+
+- `ConnectTestApp.swift` selects a `LabConfiguration` from a data-driven list. A configuration describes discovery and instructions, not a board's capabilities. Changing its identity creates a fresh screen/model and stops the old session.
+- `ConnectionLabView` renders state and forwards user actions to `ConnectionLabViewModel`. `BoardPositionView` and `ReportShareSheet` handle the grid and native sharing UI separately.
+- `ConnectionLabViewModel` owns input validation, command actions, reading counters, foreground refresh, and export presentation/cancellation. It never implements a manufacturer protocol or treats a queued command as board confirmation.
+- `LabBoardClient` is an example-only dependency boundary. `LiveLabBoardClient` forwards the library's public Combine updates and actions; tests inject a fake client without starting Bluetooth. The public library API remains unchanged.
+- `ReportExport` owns background file generation. The view model accepts an injectable exporter and clock so export snapshots, failures, dismissal, and cancellation races can be tested deterministically.
+
+All command sections are driven by the connected board's capabilities, regardless of the selected discovery preset. A new driver using normal advertisement discovery can be tested through **Board test** without a new screen. Add a `LabConfiguration` preset when a board needs different discovery instructions; do not add a board-specific boolean or duplicate the screen. Manufacturer support itself still belongs in the library's driver registry.
+
+Run `swift test` from the repository root to exercise both library tests and `ConnectTestAppSupportTests`. The latter compiles the actual files in `Support/`, including the view model and live adapter. It covers discovery configuration, capability gating, command validation, incoming updates, session cleanup, snapshot stability, export errors, late completion after cancellation, and file cleanup. It does not compile SwiftUI views or simulate a Bluetooth radio; use the iPhone build and hardware checklist for those boundaries. This support code remains outside the public library product.
 
 ## Development workflow
 

@@ -8,7 +8,7 @@ let package = Package(
     targets: [
         .target(name: "ChessBoardConnect"),
         .testTarget(name: "ChessBoardConnectTests", dependencies: ["ChessBoardConnect"]),
-        .testTarget(name: "ConnectTestAppSupportTests", path: "Examples/ConnectTestApp",
+        .testTarget(name: "ConnectTestAppSupportTests", dependencies: ["ChessBoardConnect"], path: "Examples/ConnectTestApp",
                     exclude: ["ConnectTestApp", "ConnectTestApp.xcodeproj", "Config", "README.md"],
                     sources: ["Support", "Tests"])
     ]

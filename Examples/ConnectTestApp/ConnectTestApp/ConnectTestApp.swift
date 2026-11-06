@@ -6,22 +6,23 @@ struct ConnectTestApp: App {
 }
 
 private struct LabRootView: View {
-    @State private var mode = LabMode.board
+    @State private var configuration = LabConfiguration.nearbyBoards
+
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Test mode", selection: $mode) {
-                Text("Board test").tag(LabMode.board)
-                Text("ChessUp").tag(LabMode.chessUp)
+            Picker("Test mode", selection: $configuration) {
+                ForEach(LabConfiguration.presets) { preset in
+                    Text(preset.label).tag(preset)
+                }
             }
             .pickerStyle(.segmented)
             .padding(.horizontal)
             .padding(.top, 8)
             .padding(.bottom, 16)
-            // Conditional views release the previous session when changing modes.
-            if mode == .board { ConnectionLabView() }
-            else { ConnectionLabView(chessUpOnly: true) }
+            ConnectionLabView(configuration: configuration)
+                // A different discovery configuration owns a fresh model and session.
+                .id(configuration.id)
         }
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
     }
 }
-private enum LabMode: Hashable { case board, chessUp }
